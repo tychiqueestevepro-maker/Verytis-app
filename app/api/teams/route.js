@@ -1,65 +1,71 @@
-
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req) {
-    const { searchParams } = new URL(req.url);
-    const userId = req.headers.get('x-user-id') || searchParams.get('userId');
+    const supabase = createClient();
+    const adminClient = createAdminClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const userId = user.id;
 
     try {
+        // Resolve profile for organization_id
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('organization_id, role')
+            .eq('id', userId)
+            .single();
+
+        if (!profile?.organization_id) {
+            return NextResponse.json({ error: 'Organization not found' }, { status: 400 });
+        }
+
+        const orgId = profile.organization_id;
         let teamIdsToFilter = null;
         let roleMap = {};
-        let userGlobalRole = 'member';
+        let userGlobalRole = profile.role || 'member';
 
         // AUTH & FILTER LOGIC
-        if (userId) {
-            // Get Global Role
-            const { data: user } = await supabase.from('profiles').select('role').eq('id', userId).maybeSingle();
-            userGlobalRole = user?.role || 'member';
+        // If not admin, restrict to own teams and get roles
+        if (userGlobalRole !== 'admin') {
+            const { data: myTeams } = await supabase
+                .from('team_members')
+                .select('team_id, role')
+                .eq('user_id', userId);
 
-            // If not admin, restrict to own teams and get roles
-            if (userGlobalRole !== 'admin') {
-                const { data: myTeams } = await supabase
-                    .from('team_members')
-                    .select('team_id, role')
-                    .eq('user_id', userId);
-
-                if (myTeams) {
-                    myTeams.forEach(t => roleMap[t.team_id] = t.role);
-                    teamIdsToFilter = myTeams.map(t => t.team_id);
-                } else {
-                    teamIdsToFilter = [];
-                }
-
-                // Optimization: If no teams, return early
-                if (teamIdsToFilter.length === 0) {
-                    return NextResponse.json({ teams: [] });
-                }
+            if (myTeams) {
+                myTeams.forEach(t => roleMap[t.team_id] = t.role);
+                teamIdsToFilter = myTeams.map(t => t.team_id);
             } else {
-                userGlobalRole = 'admin';
+                teamIdsToFilter = [];
+            }
+
+            // Optimization: If no teams, return early
+            if (teamIdsToFilter.length === 0) {
+                return NextResponse.json({ teams: [] });
             }
         }
 
-        // QUERY
-        let query = supabase
+        // QUERY - Use admin client to bypass RLS for member counts, but ALWAYS filter by orgId
+        let query = adminClient
             .from('teams')
             .select(`
                 *,
                 team_members (count),
                 monitored_resources (
+                    id,
                     type,
                     integrations (
                         provider
                     )
                 )
             `)
+            .eq('organization_id', orgId)
             .order('created_at', { ascending: false });
 
         if (teamIdsToFilter !== null) {
@@ -125,12 +131,18 @@ export async function POST(req) {
         // Basic validation
         if (!name) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
 
-        // Get Org ID
-        let orgId = organization_id;
-        if (!orgId) {
-            // Fallback for dev: use the Test Corp ID or fetch first available
-            orgId = '5db477f6-c893-4ec4-9123-b12160224f70';
-        }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('id', user.id)
+            .single();
+
+        if (!profile?.organization_id) return NextResponse.json({ error: 'Org not found' }, { status: 400 });
+
+        const orgId = profile.organization_id;
 
         // Prepare settings with scopes
         const settings = {

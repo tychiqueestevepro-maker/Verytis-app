@@ -6,9 +6,13 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const organizationId = searchParams.get('organizationId');
 
+    if (!organizationId) {
+        return NextResponse.json({ error: 'Missing organizationId parameter' }, { status: 400 });
+    }
+
     const state = JSON.stringify({
         type: 'app_install',
-        organizationId: organizationId || '5db477f6-c893-4ec4-9123-b12160224f70'
+        organizationId: organizationId
     });
 
     const appSlug = 'VerytisApp';

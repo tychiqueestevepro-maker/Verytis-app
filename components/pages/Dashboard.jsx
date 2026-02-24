@@ -6,61 +6,103 @@ import {
     FileText, Mail, MessageSquare, Shield, Zap, Hash,
     TrendingUp, Flame, Trophy, UserCheck, UserX, BarChart3, Users, HelpCircle, Info, ChevronDown, CheckCircle, Lock, MousePointer2, RefreshCw, Check
 } from 'lucide-react';
-import { Card, Button } from '../ui';
-import { MOCK_DECISION_METRICS, MOCK_RISK_METRICS, MOCK_TIMELINE_EVENTS, MOCK_CHANNELS, MOCK_TEAMS } from '../../data/mockData';
+import { Card, Button, DashboardEmptyState } from '../ui';
+import useSWR from 'swr';
+
+const fetcher = (url) => fetch(url).then((res) => res.json());
 
 const AdminDashboard = () => {
+    const { data: dashboardData, isLoading: dashboardLoading } = useSWR('/api/dashboard', fetcher);
+    const { data: teamsData, isLoading: teamsLoading } = useSWR('/api/teams', fetcher);
+    const { data: resourcesData, isLoading: resourcesLoading } = useSWR('/api/resources/list', fetcher);
+
     const [selectedTeam, setSelectedTeam] = useState('all');
     const [selectedChannel, setSelectedChannel] = useState('all');
     const [activeDropdown, setActiveDropdown] = useState(null);
 
+    if (dashboardLoading || teamsLoading || resourcesLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+                <RefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
+                <p className="text-slate-500 text-sm font-medium">Synchronizing live audit data...</p>
+            </div>
+        );
+    }
+
     // Filter Logic
     const availableTeams = [
         { id: 'all', name: 'All Teams' },
-        ...MOCK_TEAMS
+        ...(teamsData?.teams || [])
     ];
 
+    const allChannels = resourcesData?.resources || [];
     const availableChannels = selectedTeam === 'all'
-        ? MOCK_CHANNELS
-        : MOCK_CHANNELS.filter(c => c.team === MOCK_TEAMS.find(t => t.id === parseInt(selectedTeam))?.name);
+        ? allChannels
+        : allChannels.filter(c => c.teamId === selectedTeam);
 
-    // Compute dynamic metrics based on filters (simulated changes for demo)
+    const metrics = dashboardData?.metrics || {};
     const isFiltered = selectedTeam !== 'all' || selectedChannel !== 'all';
 
-    // 1. Global Operational Performance (Admin View)
+    // 1. Global Operational Performance (Real Data + Fallbacks)
     const ADMIN_OPS_METRICS = [
-        { label: "Global Ghost Work", value: isFiltered ? (selectedTeam === '1' ? "12%" : "9%") : "11%", trend: isFiltered ? "+2%" : "-1%", icon: AlertTriangle, color: "text-rose-500", border: "border-t-rose-500", help: "Untracked work ratio across all teams." },
-        { label: "Org Cycle Time", value: isFiltered ? (selectedTeam === '1' ? "1.8d" : "3.2d") : "2.5d", trend: "-4h", icon: Zap, color: "text-blue-500", border: "border-t-blue-500", help: "Average time from idea to production deployment." },
-        { label: "Total Code Churn", value: isFiltered ? "15%" : "18%", trend: "+3%", icon: RefreshCw, color: "text-amber-500", border: "border-t-amber-500", help: "Code rewritten within 24h of merge." },
-        { label: "Stagnant Projects", value: isFiltered ? "2" : "5", trend: "-1", icon: Hash, color: "text-indigo-500", border: "border-t-indigo-500", help: "Repositories with no activity > 30 days." }
+        {
+            label: "AI Agents",
+            value: metrics.activeAgents || 0,
+            trend: "Real-time",
+            icon: MousePointer2,
+            color: "text-blue-500",
+            border: "border-t-blue-500",
+            help: "Number of active AI monitoring agents."
+        },
+        {
+            label: "Total Events",
+            value: metrics.totalAuditedEvents || 0,
+            trend: "Last 30d",
+            icon: Activity,
+            color: "text-emerald-500",
+            border: "border-t-emerald-500",
+            help: "Total audited activity logs across all integrations."
+        },
+        {
+            label: "Autonomy Index",
+            value: `${metrics.autonomyIndex || 0}%`,
+            trend: "Systemic",
+            icon: Zap,
+            color: "text-amber-500",
+            border: "border-t-amber-500",
+            help: "Ratio of AI-driven actions vs human actions."
+        },
+        {
+            label: "Monitored Users",
+            value: metrics.monitoredUsers || 0,
+            trend: "Identity",
+            icon: Users,
+            color: "text-indigo-500",
+            border: "border-t-indigo-500",
+            help: "Total verified profiles across the organization."
+        }
     ];
 
-    // 2. Engagement Data
-    const TOP_TEAMS = [
-        { name: "Finance & Legal", actions: 142, delay: "3.5h" },
-        { name: "Engineering", actions: 118, delay: "2.1h" },
-        { name: "Product", actions: 95, delay: "4.8h" },
-        { name: "Marketing", actions: 76, delay: "1.2h" },
-        { name: "Sales Ops", actions: 54, delay: "5.5h" }
-    ];
+    // 2. Engagement Data (Derived from Teams)
+    const TOP_TEAMS = (teamsData?.teams || []).slice(0, 5).map(t => ({
+        name: t.name,
+        actions: t.stats?.total_actions || 0,
+        delay: t.stats?.avg_cycle_time || "N/A"
+    }));
 
-    // 3. Structural Alerts
-    const STRUCTURAL_ALERTS = [
-        { id: 1, text: "Critical: Merger validation pending > 48h", type: "Validation", source: "Executive" },
-        { id: 2, text: "Orphaned: 3 Q4 Budget decisions (User left)", type: "Orphaned", source: "Finance" },
-        { id: 3, text: "Bypassed: 2 Actions without validation signal", type: "Compliance", source: "Marketing" },
-        { id: 4, text: "Unread Link: Compliance Strategy v2 ignored > 5d", type: "Engagement", source: "Legal" },
-    ];
+    // 3. Structural Alerts (Mocked for now, but scoped)
+    const STRUCTURAL_ALERTS = dashboardData?.alerts || [];
 
     // 5. Quick Wins
     const QUICK_WINS = [
-        "Finance closed 3 blockers in <8h this week",
-        "Ops approved 92% of campaigns in under 1 day",
-        "Marketing processed 14 updates with no backflow"
+        "System operational with 100% traceability",
+        `${metrics.totalAuditedEvents || 0} events captured in the last 30 days`,
+        `${metrics.activeAgents || 0} AI agents active and monitoring`
     ];
+
     // Get the currently selected team object for display
     const currentTeam = selectedTeam !== 'all'
-        ? MOCK_TEAMS.find(t => t.id === parseInt(selectedTeam))
+        ? availableTeams.find(t => t.id === selectedTeam)
         : null;
 
     // --- TEAM DASHBOARD VIEW (Manager-style) ---
@@ -231,7 +273,11 @@ const AdminDashboard = () => {
                                     </div>
                                 </div>
                             )) : (
-                                <div className="p-6 text-center text-slate-400 text-xs italic">No active alerts for this team.</div>
+                                <DashboardEmptyState
+                                    title="No Active Alerts"
+                                    description="This team is currently operating within normal parameters. No structural friction detected."
+                                    icon={Shield}
+                                />
                             )}
                         </div>
                     </Card>
@@ -461,23 +507,23 @@ const AdminDashboard = () => {
                 <div className="grid grid-cols-2 gap-4">
                     <Card className="p-4 flex flex-col items-center justify-center border-l-4 border-l-emerald-500">
                         <Shield className="w-6 h-6 text-emerald-500 mb-2" />
-                        <div className="text-2xl font-bold text-slate-900">100%</div>
+                        <div className="text-2xl font-bold text-slate-900">{metrics.traceabilityScore || 100}%</div>
                         <div className="text-[10px] text-slate-500 uppercase tracking-wide text-center">Rule Compliance</div>
                     </Card>
                     <Card className="p-4 flex flex-col items-center justify-center border-l-4 border-l-blue-500">
                         <CheckCircle className="w-6 h-6 text-blue-500 mb-2" />
-                        <div className="text-2xl font-bold text-slate-900">98.5%</div>
+                        <div className="text-2xl font-bold text-slate-900">{metrics.traceabilityScore || 0}%</div>
                         <div className="text-[10px] text-slate-500 uppercase tracking-wide text-center">Traceability Rate</div>
                     </Card>
                     <Card className="p-4 flex flex-col items-center justify-center border-l-4 border-l-amber-500">
                         <Lock className="w-6 h-6 text-amber-500 mb-2" />
-                        <div className="text-2xl font-bold text-slate-900">4,210</div>
-                        <div className="text-[10px] text-slate-500 uppercase tracking-wide text-center">Audit Logs (Sep)</div>
+                        <div className="text-2xl font-bold text-slate-900">{metrics.totalAuditedEvents || 0}</div>
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wide text-center">Total Audit Logs</div>
                     </Card>
-                    <Card className="p-4 flex flex-col items-center justify-center border-l-4 border-l-blue-500">
-                        <MousePointer2 className="w-6 h-6 text-blue-500 mb-2" />
-                        <div className="text-lg font-bold text-slate-900">Auto: 92%</div>
-                        <div className="text-[10px] text-slate-500 uppercase tracking-wide text-center">Capture Rate</div>
+                    <Card className="p-4 flex flex-col items-center justify-center border-l-4 border-l-indigo-500">
+                        <MousePointer2 className="w-6 h-6 text-indigo-500 mb-2" />
+                        <div className="text-lg font-bold text-slate-900">Auto: {metrics.autonomyIndex || 0}%</div>
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wide text-center">AI Autonomy</div>
                     </Card>
                 </div>
             </div>
@@ -828,9 +874,11 @@ const Dashboard = ({ userRole }) => {
                                 </div>
                             ))
                         ) : (
-                            <div className="p-6 text-center text-slate-400 text-xs italic">
-                                No active alerts for this view.
-                            </div>
+                            <DashboardEmptyState
+                                title="All Quiet"
+                                description="No real-time anomalies detected. Your systems are performing as expected."
+                                icon={CheckCircle}
+                            />
                         )}
                     </div>
                 </Card>
@@ -892,9 +940,12 @@ const Dashboard = ({ userRole }) => {
                                 </div>
                             ))
                         ) : (
-                            <div className="text-center text-white/50 text-xs italic py-4">
-                                No spotlight stories for this channel yet.
-                            </div>
+                            <DashboardEmptyState
+                                title="No Spotlight Stories"
+                                description="Once your teams start resolving blockers and shipping features, highlights will appear here."
+                                icon={Trophy}
+                                className="text-blue-100"
+                            />
                         )}
                         <Button variant="secondary" className="mt-auto w-full text-xs bg-white/10 border-white/20 text-white hover:bg-white/20">
                             View All Wins

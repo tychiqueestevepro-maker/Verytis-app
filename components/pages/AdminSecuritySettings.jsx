@@ -17,17 +17,16 @@ export default function AdminSecuritySettings() {
                 // Fetch general activity logs and map to the format
                 const res = await fetch('/api/activity');
                 const data = await res.json();
-
-                if (data.logs) {
-                    const formattedLogs = data.logs
+                if (data.events) {
+                    const formattedLogs = data.events
                         .map(log => ({
                             id: log.id,
-                            timestamp: new Date(log.created_at).toLocaleString(),
-                            actor: log.actor_name || 'System',
-                            action: log.action_type,
-                            target: log.summary || 'N/A',
+                            timestamp: new Date(log.timestamp).toLocaleString(),
+                            actor: log.actor || 'System',
+                            action: log.action,
+                            target: log.target || 'N/A',
                             status: 'SUCCESS'
-                        })).slice(0, 50); // Keep last 50 for demo
+                        }));
 
                     setSecurityLogs(formattedLogs);
                 }

@@ -301,7 +301,7 @@ const ChannelDetail = ({ userRole }) => {
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        <Button variant="secondary" icon={Clock} onClick={() => router.push(`/timeline/${channel.id}`)}>View Timeline</Button>
+                        <Button variant="secondary" icon={Clock} onClick={() => router.push(`/timeline/${channel.platform}/${channel.id}`)}>View Timeline</Button>
                         {canExport && <Button variant="secondary" icon={Download}>Export</Button>}
                     </div>
                 </div>

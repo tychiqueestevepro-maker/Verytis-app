@@ -13,43 +13,10 @@ import { useRole } from '@/lib/providers';
 
 const FloatingSidebar = ({ onModalOpen, isCollapsed, onToggleCollapse, currentRole, onRoleChange, user, onLogout }) => {
     const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-    const [isUserSwitcherOpen, setIsUserSwitcherOpen] = useState(false);
     const profileMenuRef = useRef(null);
     const pathname = usePathname();
 
     const { currentUser: contextUser, setCurrentUser: setContextUser } = useRole();
-    const [users, setUsers] = useState([]);
-    const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-
-    useEffect(() => {
-        setIsLoadingUsers(true);
-        fetch('/api/users')
-            .then(res => res.json())
-            .then(data => {
-                if (data.users) setUsers(data.users);
-            })
-            .catch(err => console.error("Failed to load users", err))
-            .finally(() => setIsLoadingUsers(false));
-    }, []);
-
-    const handleUserSwitch = (e) => {
-        const userId = e.target.value;
-        const selectedUser = users.find(u => u.id === userId);
-        if (selectedUser) {
-            // Map API user to Context User format
-            setContextUser({
-                id: selectedUser.id,
-                name: selectedUser.full_name || selectedUser.email,
-                email: selectedUser.email,
-                role: selectedUser.role ? (selectedUser.role.charAt(0).toUpperCase() + selectedUser.role.slice(1)) : 'Member',
-                avatar: selectedUser.avatar_url,
-                initials: (selectedUser.full_name || selectedUser.email).substring(0, 2).toUpperCase(),
-                color: 'from-blue-500 to-purple-600', // Default color
-                teams: selectedUser.teams || [],
-                managedTeams: selectedUser.managedTeams || []
-            });
-        }
-    };
 
     const userPersonas = {
         Admin: { name: 'Tychique Esteve', initials: 'TE', role: 'Admin', color: 'from-blue-500 to-purple-600' },
@@ -152,52 +119,6 @@ const FloatingSidebar = ({ onModalOpen, isCollapsed, onToggleCollapse, currentRo
                 </nav>
             </div>
 
-            {/* Role Switcher */}
-            {/* User Switcher (Dev Mode) */}
-            {!isCollapsed && (
-                <div className="px-6 py-2 mb-2">
-                    <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex justify-between items-center">
-                        Dev: Switch Account
-                        {isLoadingUsers && <span className="text-[8px] animate-pulse">Loading...</span>}
-                    </div>
-
-                    <div className="relative">
-                        {isUserSwitcherOpen && <div className="fixed inset-0 z-40" onClick={() => setIsUserSwitcherOpen(false)} />}
-                        <button
-                            onClick={() => setIsUserSwitcherOpen(!isUserSwitcherOpen)}
-                            className="w-full text-[10px] font-medium bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 text-left flex items-center justify-between transition-colors hover:bg-slate-100"
-                        >
-                            <span className="truncate">{contextUser ? `${contextUser.full_name || contextUser.email} (${contextUser.role})` : 'Select user...'}</span>
-                            <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isUserSwitcherOpen ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {isUserSwitcherOpen && (
-                            <div className="absolute z-50 bottom-full left-0 w-full mb-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
-                                {users.length === 0 ? (
-                                    <div className="px-2 py-1.5 text-[10px] text-slate-400 text-center">No users found</div>
-                                ) : (
-                                    users.map(u => (
-                                        <button
-                                            key={u.id}
-                                            onClick={() => {
-                                                handleUserSwitch({ target: { value: u.id } });
-                                                setIsUserSwitcherOpen(false);
-                                            }}
-                                            className={`w-full text-left px-2 py-1.5 text-[10px] hover:bg-slate-50 flex items-center justify-between transition-colors ${contextUser?.id === u.id ? 'bg-blue-50 text-blue-700' : 'text-slate-700'}`}
-                                        >
-                                            <div className="truncate pr-2">
-                                                <span className="font-medium">{u.full_name || u.email}</span>
-                                                <span className="text-slate-400 ml-1">({u.role})</span>
-                                            </div>
-                                            {contextUser?.id === u.id && <Check className="w-3 h-3 flex-shrink-0" />}
-                                        </button>
-                                    ))
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
 
             {/* Profile Section */}
             <div className={`border-t border-slate-200/50 relative ${isCollapsed ? 'py-4' : 'p-4'}`} ref={profileMenuRef}>

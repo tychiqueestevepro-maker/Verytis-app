@@ -1,17 +1,23 @@
-
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 10; // Cache for 10 seconds
 
 export async function GET(req) {
-    const TEST_ORG_ID = '5db477f6-c893-4ec4-9123-b12160224f70'; // Hardcoded for MVP
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
     try {
         const { data: users, error } = await supabase
@@ -28,7 +34,7 @@ export async function GET(req) {
                     status
                 )
             `)
-            .eq('organization_id', TEST_ORG_ID);
+            .eq('organization_id', profile.organization_id);
 
         if (error) throw error;
 

@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Plus, Bot, Terminal, ShieldAlert, Cpu, CheckCircle2, Copy, RefreshCw, Layers } from 'lucide-react';
-import { Card, Button, Modal, StatusBadge } from '../ui';
+import { Search, Filter, Plus, ChevronRight, X, MoreVertical, Trash2, Users, Activity, Settings, Bot, ShieldAlert, Copy, Cpu, RefreshCw, Layers, CheckCircle2 } from 'lucide-react';
+import { Card, Button, StatusBadge, PlatformIcon, Modal, EmptyState } from '../ui';
 
 const fetcher = (url) => fetch(url).then(r => r.json());
 
@@ -56,76 +56,8 @@ export default function AiAgents({ userRole }) {
     // Store new agent to display API key once
     const [newAgentResult, setNewAgentResult] = useState(null);
 
-    // const { data, error, isLoading, mutate } = useSWR('/api/agents', fetcher);
-    // const agents = data?.agents || [];
-
-    const fakeAgents = [
-        {
-            id: 'agent-1',
-            name: 'Code Review Agent',
-            description: 'Scans PRs and detects vulnerabilities',
-            status: 'active',
-            telemetry: [
-                {
-                    id: 'log-2',
-                    summary: 'ANALYSIS_COMPLETE',
-                    created_at: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
-                    metadata: {
-                        trace_id: 'req-12345',
-                        message: 'Found 2 potential SQL injection vulnerabilities in user_controller.js',
-                        ai_context: { model: 'gpt-4' },
-                        cognitive_load: { retry_count: 0, tools_called: ['ast_parser'] }
-                    }
-                },
-                {
-                    id: 'log-1',
-                    summary: 'TOOL_CALL',
-                    created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-                    metadata: {
-                        trace_id: 'req-12345',
-                        message: 'Searching vector DB for relevant context',
-                        ai_context: { model: 'gpt-4' },
-                        cognitive_load: { retry_count: 1, tools_called: ['search'] }
-                    }
-                }
-            ]
-        },
-        {
-            id: 'agent-2',
-            name: 'Customer Support Bot',
-            description: 'Auto-replies to common queries in Slack',
-            status: 'active',
-            telemetry: [
-                {
-                    id: 'log-4',
-                    summary: 'API_ERROR',
-                    created_at: new Date(Date.now() - 1000 * 60 * 14).toISOString(),
-                    metadata: {
-                        trace_id: 'slack-msg-999',
-                        message: 'Failed to fetch Stripe invoice details: 401 Unauthorized',
-                        ai_context: { model: 'claude-3-haiku' },
-                        cognitive_load: { retry_count: 3, tools_called: ['stripe_api'] }
-                    }
-                },
-                {
-                    id: 'log-3',
-                    summary: 'MESSAGE_RECEIVED',
-                    created_at: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-                    metadata: {
-                        trace_id: 'slack-msg-999',
-                        message: 'Classifying user intent: billing_issue',
-                        ai_context: { model: 'claude-3-haiku' },
-                        cognitive_load: { retry_count: 0, tools_called: ['intent_classifier'] }
-                    }
-                }
-            ]
-        }
-    ];
-
-    const agents = fakeAgents;
-    const isLoading = false;
-    const error = null;
-    const mutate = () => { };
+    const { data, error, isLoading, mutate } = useSWR('/api/agents', fetcher);
+    const agents = data?.agents || [];
 
     const handleRegister = async (e) => {
         e.preventDefault();
@@ -178,12 +110,13 @@ export default function AiAgents({ userRole }) {
                     Failed to load AI Agents
                 </Card>
             ) : agents.length === 0 ? (
-                <Card className="p-16 text-center text-slate-500 flex flex-col items-center border-dashed">
-                    <Terminal className="w-12 h-12 text-slate-300 mb-4" />
-                    <h3 className="text-sm font-semibold text-slate-900">No Agents Registered</h3>
-                    <p className="text-xs mt-1 mb-4">You have not registered any AI Agents yet for telemetry.</p>
-                    <Button variant="secondary" onClick={() => setIsRegisterModalOpen(true)}>Create the first one</Button>
-                </Card>
+                <EmptyState
+                    title="No Agents Registered"
+                    description="You have not registered any AI Agents yet. Start monitoring your autonomous agents by creating your first identity."
+                    icon={Bot}
+                    actionText="Register New Agent"
+                    onAction={() => setIsRegisterModalOpen(true)}
+                />
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {agents.map(agent => (
@@ -230,7 +163,7 @@ export default function AiAgents({ userRole }) {
                                                     )}
 
                                                     {log.metadata?.cognitive_load?.retry_count > 0 && (
-                                                        <span className={`inline-flex items-center gap-1 border px-1.5 py-0.5 rounded text-[10px] font-medium \${log.metadata.cognitive_load.retry_count > 2 ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                                        <span className={`inline-flex items-center gap-1 border px-1.5 py-0.5 rounded text-[10px] font-medium ${log.metadata.cognitive_load.retry_count > 2 ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                                                             <RefreshCw className="w-3 h-3" /> Retry: {log.metadata.cognitive_load.retry_count}
                                                         </span>
                                                     )}

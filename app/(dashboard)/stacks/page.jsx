@@ -22,30 +22,7 @@ export default function StacksPage() {
                     const data = await res.json();
                     setTeams(data.teams || []);
                 } else {
-                    // Fallback mock data if API fails or doesn't exist yet
-                    setTeams([
-                        {
-                            id: 1,
-                            name: 'Engineering & Product',
-                            description: 'Core product development and R&D',
-                            members: 14,
-                            integrations: ['slack', 'github']
-                        },
-                        {
-                            id: 2,
-                            name: 'Finance & Legal',
-                            description: 'Corporate auditing and compliance',
-                            members: 6,
-                            integrations: ['slack', 'teams']
-                        },
-                        {
-                            id: 3,
-                            name: 'Marketing',
-                            description: 'Growth and brand management',
-                            members: 4,
-                            integrations: ['trello', 'slack']
-                        }
-                    ]);
+                    setTeams([]);
                 }
             } catch (err) {
                 console.error("Failed to fetch teams", err);

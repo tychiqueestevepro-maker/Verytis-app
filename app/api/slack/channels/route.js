@@ -1,26 +1,25 @@
 import { NextResponse } from 'next/server';
 import { WebClient } from '@slack/web-api';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 
 export async function GET(req) {
-    const { searchParams } = new URL(req.url);
-    let organizationId = searchParams.get('organizationId');
-    const teamId = searchParams.get('teamId');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    if (!organizationId && teamId) {
-        const { data } = await supabase.from('teams').select('organization_id').eq('id', teamId).single();
-        if (data) organizationId = data.organization_id;
-    }
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
 
-    const targetOrgId = organizationId || '5db477f6-c893-4ec4-9123-b12160224f70';
+    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+    const targetOrgId = profile.organization_id;
 
     const { data: integration } = await supabase.from('integrations')
-        .select('settings')
+        .select('id, settings')
         .eq('organization_id', targetOrgId)
         .eq('provider', 'slack')
         .single();
@@ -28,7 +27,14 @@ export async function GET(req) {
     const token = integration?.settings?.bot_token;
 
     if (!token) {
-        return NextResponse.json({ error: 'No Slack access token found for this organization' }, { status: 401 });
+        const { data: existing } = await supabase.from('monitored_resources')
+            .select('*')
+            .eq('integration_id', integration?.id)
+            .eq('type', 'channel');
+
+        return NextResponse.json({
+            channels: (existing || []).map(c => ({ id: c.external_id, name: c.name, num_members: 0 }))
+        });
     }
 
     const client = new WebClient(token);
@@ -49,7 +55,14 @@ export async function GET(req) {
 
         return NextResponse.json({ channels });
     } catch (error) {
-        console.error('Slack Channels Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.warn('Slack API Error, falling back to DB:', error.message);
+        const { data: existing } = await supabase.from('monitored_resources')
+            .select('*')
+            .eq('integration_id', integration?.id)
+            .eq('type', 'channel');
+
+        return NextResponse.json({
+            channels: (existing || []).map(c => ({ id: c.external_id, name: c.name, num_members: 0 }))
+        });
     }
 }

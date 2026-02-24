@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Shield, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { Shield, CheckCircle, XCircle, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card } from '../ui';
 
 import { useRole } from '@/lib/providers';
@@ -64,13 +64,13 @@ const PassportIDSettings = () => {
     }, [currentUser]);
 
     useEffect(() => {
-        if (currentUser?.id && currentUser.id !== 'mock-admin-id') {
+        if (currentUser?.id) {
             fetchPassportStatus();
         }
     }, [currentUser?.id]);
 
     const fetchPassportStatus = async () => {
-        if (!currentUser?.id || currentUser.id === 'mock-admin-id') return;
+        if (!currentUser?.id) return;
 
         setIsLoading(true);
         setError(null);

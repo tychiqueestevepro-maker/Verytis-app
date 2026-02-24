@@ -88,34 +88,46 @@ export async function GET(req, { params }) {
         }));
 
         // Fetch Recent Activity (Limit 50 for better mix)
-        const slackChannelIds = channels.filter(c => c.integrations?.provider === 'slack' || c.type === 'channel').map(c => c.external_id).filter(Boolean);
+        const channelIds = channels.map(c => c.id);
         const repoNames = channels.filter(c => c.integrations?.provider === 'github' || c.type === 'repo').map(c => c.name).filter(Boolean);
+        const slackChannelIds = channels.filter(c => c.integrations?.provider === 'slack' || c.type === 'channel').map(c => c.external_id).filter(Boolean);
         const trelloBoardIds = channels.filter(c => c.integrations?.provider === 'trello' || c.type === 'board').map(c => c.external_id).filter(Boolean);
 
         let recentActivity = [];
         let orConditions = [];
 
+        // 1. Primary Filter: Resource IDs (if properly linked)
+        if (channelIds.length > 0) {
+            // Quote UUIDs for robust OR query
+            const quotedIds = channelIds.map(id => `"${id}"`).join(',');
+            orConditions.push(`resource_id.in.(${quotedIds})`);
+        }
+
+        // 2. Metadata Fallbacks (for logs without resource_id)
         if (slackChannelIds.length > 0) {
-            const safeIds = slackChannelIds.slice(0, 10);
-            const slackFilter = safeIds.map(id => `metadata->>slack_channel.eq.${id}`).join(',');
-            if (slackFilter) orConditions.push(slackFilter);
+            slackChannelIds.slice(0, 10).forEach(id => {
+                orConditions.push(`metadata->>slack_channel.eq.${id}`);
+            });
         }
 
         if (repoNames.length > 0) {
-            const safeRepos = repoNames.slice(0, 10);
-            const repoFilter = safeRepos.map(name => `metadata->>repo.eq.${name}`).join(',');
-            if (repoFilter) orConditions.push(repoFilter);
+            repoNames.slice(0, 10).forEach(name => {
+                orConditions.push(`metadata->>repo.eq.${name}`);
+            });
         }
 
         if (trelloBoardIds.length > 0) {
-            const safeBoards = trelloBoardIds.slice(0, 10);
-            const trelloFilter = safeBoards.map(id => `metadata->>board_id.eq.${id}`).join(',');
-            if (trelloFilter) orConditions.push(trelloFilter);
+            trelloBoardIds.slice(0, 10).forEach(id => {
+                orConditions.push(`metadata->>board_id.eq.${id}`);
+                // Also check board_name as some old logs might use it
+                const board = channels.find(c => c.external_id === id);
+                if (board) orConditions.push(`metadata->>board_name.eq.${board.name}`);
+            });
         }
 
         if (orConditions.length > 0) {
             const finalOr = orConditions.join(',');
-            const { data: logs } = await supabase
+            const { data: logs, error: logsError } = await supabase
                 .from('activity_logs')
                 .select(`
                     *,
@@ -124,26 +136,27 @@ export async function GET(req, { params }) {
                 .or(finalOr)
                 .order('created_at', { ascending: false })
                 .limit(50);
-            recentActivity = logs || [];
-        } else {
-            // Fallback: Query by resource_id if no external IDs/Names
-            const channelIds = channels.map(c => c.id);
-            if (channelIds.length > 0) {
-                const { data: logs } = await supabase
-                    .from('activity_logs')
-                    .select('*, profiles:actor_id(*)')
-                    .in('resource_id', channelIds)
-                    .order('created_at', { ascending: false })
-                    .limit(50);
-                recentActivity = logs || [];
+
+            if (logsError) {
+                console.error("DEBUG: Error fetching activity logs:", logsError);
             }
+            recentActivity = logs || [];
         }
 
         // Fetch Audit Scopes (from settings or defaults)
         const scopes = team.settings?.scopes || ['Channel Audit', 'Documentation Audit', 'Reports & Exports'];
 
-        // Compute unique integrations
-        const uniqueIntegrations = [...new Set(channels.map(c => c.integrations?.provider || (c.type === 'channel' ? 'slack' : 'teams')).filter(Boolean))];
+        // Map Channels with standard platform identification (strictly from DB)
+        const mappedChannels = channels.map(c => ({
+            id: c.id,
+            name: c.name,
+            platform: c.integrations?.provider, // No fallback in code
+            decisionsCount: c.decisionsCount,
+            external_id: c.external_id
+        }));
+
+        // Compute unique integrations for the stack sections
+        const integrations = [...new Set(mappedChannels.map(c => c.platform).filter(Boolean))];
 
         // Construct Response
         const fullTeam = {
@@ -152,47 +165,39 @@ export async function GET(req, { params }) {
                 id: m.profiles?.id || m.user_id,
                 name: m.profiles?.full_name || m.profiles?.email || 'Unknown',
                 email: m.profiles?.email || '',
-                role: m.role, // 'lead' or 'member'
+                role: m.role,
                 avatar: m.profiles?.avatar_url || '',
                 joined_at: m.joined_at,
                 social_profiles: m.profiles?.social_profiles || {}
             })),
-            channels: channels.map(c => ({
-                id: c.id,
-                name: c.name,
-                platform: c.integrations?.provider || (c.type === 'channel' ? 'slack' : c.type === 'repo' ? 'github' : c.type === 'board' ? 'trello' : 'other'),
-                decisionsCount: c.decisionsCount,
-                external_id: c.external_id
-            })),
-            integrations: [...new Set(channels.map(c => c.integrations?.provider || (c.type === 'channel' ? 'slack' : c.type === 'repo' ? 'github' : c.type === 'board' ? 'trello' : null)).filter(item => item && item !== 'slack'))],
+            channels: mappedChannels,
+            integrations: integrations,
             recentActivity: recentActivity.map(a => {
-                const channel = channels.find(c =>
-                    (c.integrations?.provider === 'slack' && c.external_id === a.metadata?.slack_channel) ||
-                    (c.integrations?.provider === 'github' && c.name === a.metadata?.repo) ||
-                    (c.integrations?.provider === 'trello' && c.external_id === a.metadata?.board_id)
+                // Find matching channel strictly by resource_id or metadata link
+                const channel = mappedChannels.find(c => c.id === a.resource_id) || mappedChannels.find(c =>
+                    (c.platform === 'slack' && c.external_id === a.metadata?.slack_channel) ||
+                    (c.platform === 'github' && c.name === a.metadata?.repo) ||
+                    (c.platform === 'trello' && c.external_id === a.metadata?.board_id)
                 );
-                const channelName = channel?.name || a.metadata?.board_name || 'Unknown';
-                const actorName = a.profiles?.full_name || 'System';
-                const actionType = a.action_type || 'Activity';
 
                 return {
                     id: a.id,
-                    description: a.summary || actionType,
+                    description: a.summary || a.action_type,
                     user: {
-                        name: actorName,
+                        name: a.profiles?.full_name || 'System',
                         avatar: a.profiles?.avatar_url
                     },
                     time: a.created_at,
-                    channel: channelName,
-                    platform: channel?.platform || (a.metadata?.repo ? 'github' : a.metadata?.board_id ? 'trello' : 'slack'),
-                    actionType: actionType,
+                    channel: channel?.name || 'Unknown',
+                    platform: channel?.platform,
+                    actionType: a.action_type,
                     metadata: a.metadata
                 };
             }),
             scopes,
             stats: {
                 members: members.length,
-                channels: channels.length,
+                channels: mappedChannels.length,
                 managers: members.filter(m => m.role === 'lead').length
             }
         };

@@ -1,19 +1,23 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req) {
-    const { searchParams } = new URL(req.url);
-    const organizationId = searchParams.get('organizationId');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // 1. Context: Dynamic or Fallback "Test Corp"
-    const targetOrgId = organizationId || '5db477f6-c893-4ec4-9123-b12160224f70';
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+    const targetOrgId = profile.organization_id;
 
     // 2. Check if we have a token in 'integrations'
     const { data, error } = await supabase.from('integrations')

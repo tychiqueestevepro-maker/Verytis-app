@@ -3,7 +3,7 @@ import useSWR from 'swr';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Shield, FileText, Slack, Users, CheckCircle, XCircle, UserCheck, Download, Table, FileSpreadsheet, X, Calendar, Search, Filter, Lock, ChevronDown, Check } from 'lucide-react';
-import { Card, Button, PlatformIcon, Modal } from '../ui';
+import { Card, Button, PlatformIcon, Modal, EmptyState } from '../ui';
 import AuditLogo from '../image/LOGO.PNG-ICARE.svg';
 import SlackLogo from '../image/Slack Logo 2019.png';
 
@@ -28,14 +28,27 @@ const AuditDocumentation = ({ userRole, currentUser: propUser }) => {
     const availableUsers = usersData?.users || [];
 
     // Process channels from metadata - Memorized to prevent re-renders
-    const realChannels = useMemo(() => (metaData?.resources || []).map(r => ({
-        id: r.external_id || r.id, // Prefer external_id for API calls if needed, but ID is safer for DB queries
-        dbId: r.id, // Explicit DB ID for API calls
-        name: r.name || r.external_id,
-        team: r.teams?.name || 'Unassigned',
-        teamId: r.team_id,
-        platform: r.integrations?.provider || 'Slack' // Provider from integrations table
-    })), [metaData]);
+    const realChannels = useMemo(() => {
+        const resources = (metaData?.resources || []).map(r => ({
+            id: r.external_id || r.id,
+            dbId: r.id,
+            name: r.name || r.external_id,
+            team: r.teams?.name || 'Unassigned',
+            teamId: r.team_id,
+            platform: r.integrations?.provider || 'Slack'
+        }));
+
+        const agents = (metaData?.agents || []).map(a => ({
+            id: a.id,
+            dbId: a.id,
+            name: `AGENT: ${a.name}`,
+            team: 'AI Governance',
+            teamId: 'ai-gov',
+            platform: 'AI Agent'
+        }));
+
+        return [...resources, ...agents];
+    }, [metaData]);
 
     // Filter States
     const [selectedChannels, setSelectedChannels] = useState([]); // Array of IDs (dbId)
@@ -78,7 +91,7 @@ const AuditDocumentation = ({ userRole, currentUser: propUser }) => {
     // Reset report type when platform or role changes
     useEffect(() => {
         const isMT = platform === 'Slack';
-        const suffix = platform === 'GitHub' ? 'Repo' : platform === 'Trello' ? 'Board' : 'Channel';
+        const suffix = platform === 'GitHub' ? 'Repo' : platform === 'Trello' ? 'Board' : platform === 'AI Agent' ? 'Agent' : 'Channel';
 
         // Reset selections when platform changes
         setSelectedChannels([]);
@@ -656,8 +669,8 @@ const AuditDocumentation = ({ userRole, currentUser: propUser }) => {
                         {/* Platform Selector */}
                         <div>
                             <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-2">Platform</label>
-                            <div className="grid grid-cols-3 gap-2">
-                                {['Slack', 'Trello', 'GitHub'].map(p => (
+                            <div className="grid grid-cols-4 gap-2">
+                                {['Slack', 'Trello', 'GitHub', 'AI Agent'].map(p => (
                                     <button
                                         key={p}
                                         onClick={() => setPlatform(p)}
@@ -743,6 +756,8 @@ const AuditDocumentation = ({ userRole, currentUser: propUser }) => {
                                                     options = ['Full Board Audit', 'My Activity Board'];
                                                 } else if (platform === 'GitHub') {
                                                     options = ['Full Repo Audit', 'My Activity Repo'];
+                                                } else if (platform === 'AI Agent') {
+                                                    options = ['Full AI Audit', 'Targeted Agent Audit'];
                                                 }
                                                 // Member role restriction logic if needed, but assuming mostly admin/manager for full audits
                                                 if (userRole === 'Member') {
@@ -766,7 +781,7 @@ const AuditDocumentation = ({ userRole, currentUser: propUser }) => {
                         {/* Channel/Repo Selector */}
                         <div>
                             <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">
-                                Authorized {platform === 'GitHub' ? 'Repos' : platform === 'Trello' ? 'Boards' : 'Channels'}
+                                Authorized {platform === 'GitHub' ? 'Repos' : platform === 'Trello' ? 'Boards' : platform === 'AI Agent' ? 'Agents' : 'Channels'}
                             </label>
                             <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg pr-1 custom-scrollbar bg-slate-50 p-2 space-y-1">
                                 {availableChannels.length > 0 ? (
@@ -790,9 +805,13 @@ const AuditDocumentation = ({ userRole, currentUser: propUser }) => {
                                         </label>
                                     ))
                                 ) : (
-                                    <p className="text-xs text-slate-400 p-1">
-                                        No {platform === 'GitHub' ? 'repos' : platform === 'Trello' ? 'boards' : 'channels'} found.
-                                    </p>
+                                    <div className="py-2">
+                                        <EmptyState
+                                            title="No Resources"
+                                            description={`No authorized ${platform === 'GitHub' ? 'repos' : platform === 'Trello' ? 'boards' : platform === 'AI Agent' ? 'agents' : 'channels'} available for this team.`}
+                                            className="p-4"
+                                        />
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -881,10 +900,12 @@ const AuditDocumentation = ({ userRole, currentUser: propUser }) => {
                                         <div className="animate-spin w-8 h-8 border-2 border-slate-900 border-t-transparent rounded-full"></div>
                                     </div>
                                 ) : filteredEvents.length === 0 ? (
-                                    <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-4">
-                                        <FileText className="w-16 h-16 opacity-20" />
-                                        <p className="text-sm font-medium uppercase tracking-wide">Select resources to preview audit</p>
-                                    </div>
+                                    <EmptyState
+                                        title="Ready to Preview"
+                                        description="Select one or more resources from the sidebar to generate a live preview of your audit document."
+                                        icon={FileText}
+                                        className="h-full border-none bg-transparent"
+                                    />
                                 ) : (
                                     <div className="space-y-6">
                                         {/* 1. Header Section (Matched to PDF) */}

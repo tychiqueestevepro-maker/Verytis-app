@@ -16,13 +16,7 @@ export async function POST(req) {
             process.env.SUPABASE_SERVICE_ROLE_KEY
         );
 
-        // Map Dev Switcher IDs to real UUIDs
-        const DEV_USER_MAP = {
-            'tychiqueesteve2026ai': '4cf8db21-2e1e-4c22-9055-d586b7fed310', // tychiqueesteve2005@gmail.com
-            'mock-admin-id': '4cf8db21-2e1e-4c22-9055-d586b7fed310'
-        };
-
-        const targetUserId = DEV_USER_MAP[userId] || userId;
+        const targetUserId = userId;
         console.log('Trello save-member: mapping userId', userId, 'to', targetUserId);
 
         // Get current profile

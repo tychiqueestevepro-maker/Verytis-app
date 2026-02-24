@@ -168,11 +168,7 @@ async function logGitHubActivity(supabase, actionType, repository, githubUsernam
         profile = legacyProfile;
     }
 
-    if (!profile && lowerGithubUsername === 'tychiqueesteve') {
-        userId = '4cf8db21-2e1e-4c22-9055-d586b7fed310';
-        isVerified = true;
-        method = 'MANUAL_MAPPING';
-    } else if (profile) {
+    if (profile) {
         userId = profile.id;
         isVerified = true;
         method = 'SOCIAL_LINK';

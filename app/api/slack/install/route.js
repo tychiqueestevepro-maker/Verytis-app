@@ -7,19 +7,20 @@ export async function GET(req) {
         return NextResponse.json({ error: 'SLACK_CLIENT_ID is not defined in environment variables' }, { status: 500 });
     }
 
-    const { searchParams } = new URL(req.url);
-    let organizationId = searchParams.get('organizationId');
-    const teamId = searchParams.get('teamId');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    // Resolve Org ID from Team ID if needed
-    if (!organizationId && teamId) {
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY
-        );
-        const { data } = await supabase.from('teams').select('organization_id').eq('id', teamId).single();
-        if (data) organizationId = data.organization_id;
-    }
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+    const organizationId = profile.organization_id;
 
     const scopes = [
         'channels:history', 'channels:read', 'chat:write', 'files:read',
@@ -27,8 +28,10 @@ export async function GET(req) {
         'users:read', 'users:read.email'
     ].join(',');
 
+    if (!organizationId) return NextResponse.json({ error: 'Missing organization context' }, { status: 400 });
+
     const state = JSON.stringify({
-        organizationId: organizationId || '5db477f6-c893-4ec4-9123-b12160224f70'
+        organizationId: organizationId
     });
 
     const installUrl = `https://slack.com/oauth/v2/authorize?client_id=${process.env.SLACK_CLIENT_ID}&scope=${scopes}&redirect_uri=${process.env.NEXT_PUBLIC_BASE_URL}/api/slack/callback&state=${encodeURIComponent(state)}`;

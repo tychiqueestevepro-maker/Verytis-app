@@ -1,20 +1,25 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-    // Hardcoded for MVP "Test Corp"
-    const TEST_ORG_ID = '5db477f6-c893-4ec4-9123-b12160224f70';
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
 
     try {
-        // Fetch monitored resources and their integration details
-        const { data: resources, error } = await supabase
+        // Fetch monitored resources and their integration details - filter by org at DB level
+        const { data: orgResources, error } = await supabase
             .from('monitored_resources')
             .select(`
                 id,
@@ -26,22 +31,14 @@ export async function GET() {
                 metadata,
                 integration_id,
                 team_id,
-                integrations (
+                integrations!inner (
                     provider,
                     organization_id
                 )
-            `);
+            `)
+            .eq('integrations.organization_id', profile.organization_id);
 
         if (error) throw error;
-
-        // Filter for our ORG (though we only have one integration likely)
-        const orgResources = resources.filter(r => {
-            const match = r.integrations && r.integrations.organization_id === TEST_ORG_ID;
-            if (!match) {
-                console.log(`Resource ${r.id} (${r.name}) filtered out. OrgID: ${r.integrations?.organization_id} vs ${TEST_ORG_ID}`);
-            }
-            return match;
-        });
 
         // Fetch activity stats for these resources
         const resourceIds = orgResources.map(r => r.id);
@@ -107,7 +104,7 @@ export async function GET() {
                 id: r.id,
                 name: r.name,
                 integration: r.integrations,
-                org_id_match: r.integrations?.organization_id === TEST_ORG_ID
+                org_id_match: r.integrations?.organization_id === profile.organization_id
             }))
         });
     } catch (err) {

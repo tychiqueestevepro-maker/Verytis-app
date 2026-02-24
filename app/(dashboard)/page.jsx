@@ -5,48 +5,47 @@ import { Cpu, Users, ShieldCheck, CheckCircle, ArrowRight, Activity, Code, Clock
 import Link from 'next/link';
 import { useRole } from '@/lib/providers';
 
-const MOCK_EVENTS = [
-    {
-        id: 'trc_1',
-        actor: { name: 'Elena Ross', type: 'human', avatar: 'ER' },
-        action: 'merged pull request #142',
-        target: 'core-api',
-        status: 'VERIFIED',
-        time: '2 mins ago',
-        icon: <Code className="w-4 h-4" />
-    },
-    {
-        id: 'trc_2',
-        actor: { name: 'Security-Scan-Bot', type: 'agent', avatar: '🤖' },
-        action: 'completed vulnerability scan',
-        target: 'prod-eu-west',
-        status: 'CLEAN',
-        time: '15 mins ago',
-        icon: <ShieldCheck className="w-4 h-4" />
-    },
-    {
-        id: 'trc_3',
-        actor: { name: 'Auto-Deployer-Agent', type: 'agent', avatar: '🤖' },
-        action: 'triggered deployment',
-        target: 'auth-service v2.1.0',
-        status: 'VERIFIED',
-        time: '1 hour ago',
-        icon: <Activity className="w-4 h-4" />
-    },
-    {
-        id: 'trc_4',
-        actor: { name: 'David Kim', type: 'human', avatar: 'DK' },
-        action: 'updated IAM policy',
-        target: 'Role: db-admin',
-        status: 'REVIEWED',
-        time: '3 hours ago',
-        icon: <Users className="w-4 h-4" />
-    }
-];
-
 export default function ExecutiveLaunchpad() {
     const { currentUser } = useRole();
     const userName = currentUser?.name?.split(' ')[0] || 'Tychique';
+
+    const [metrics, setMetrics] = React.useState({
+        activeAgents: 0,
+        totalAuditedEvents: 0,
+        monitoredUsers: 0,
+        autonomyIndex: 0,
+        traceabilityScore: 0
+    });
+    const [recentEvents, setRecentEvents] = React.useState([]);
+    const [isLoading, setIsLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const fetchDashboardData = async () => {
+            try {
+                const res = await fetch('/api/dashboard');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.metrics) setMetrics(data.metrics);
+                    if (data.recentEvents) setRecentEvents(data.recentEvents);
+                }
+            } catch (err) {
+                console.error("Failed to load dashboard data", err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchDashboardData();
+    }, []);
+
+    const formatTimeAgo = (dateString) => {
+        const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+        const diff = (new Date(dateString) - new Date()) / 1000;
+
+        if (Math.abs(diff) < 60) return rtf.format(Math.round(diff), 'second');
+        if (Math.abs(diff) < 3600) return rtf.format(Math.round(diff / 60), 'minute');
+        if (Math.abs(diff) < 86400) return rtf.format(Math.round(diff / 3600), 'hour');
+        return rtf.format(Math.round(diff / 86400), 'day');
+    };
 
     return (
         <div className="min-h-screen bg-slate-50 text-slate-900 pb-12 animate-in fade-in duration-300">
@@ -79,7 +78,9 @@ export default function ExecutiveLaunchpad() {
                                     <Cpu className="w-5 h-5 text-indigo-600" />
                                 </div>
                                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">AI Workforce</h3>
-                                <div className="text-2xl font-bold text-slate-900">10 Active Agents</div>
+                                <div className="text-2xl font-bold text-slate-900">
+                                    {isLoading ? <div className="h-8 w-16 bg-slate-100 animate-pulse rounded"></div> : `${metrics.activeAgents} Active Agents`}
+                                </div>
                             </div>
                             <div className="mt-6 flex items-center font-semibold text-sm text-indigo-600 group-hover:text-indigo-700 transition-colors">
                                 Manage AI Fleet <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
@@ -95,7 +96,9 @@ export default function ExecutiveLaunchpad() {
                                     <Users className="w-5 h-5 text-blue-600" />
                                 </div>
                                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Passport Identities</h3>
-                                <div className="text-2xl font-bold text-slate-900">152 Monitored Users</div>
+                                <div className="text-2xl font-bold text-slate-900">
+                                    {isLoading ? <div className="h-8 w-24 bg-slate-100 animate-pulse rounded inline-block"></div> : `${metrics.monitoredUsers} Monitored Users`}
+                                </div>
                             </div>
                             <div className="mt-6 flex items-center font-semibold text-sm text-blue-600 group-hover:text-blue-700 transition-colors">
                                 Manage Access <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
@@ -127,19 +130,25 @@ export default function ExecutiveLaunchpad() {
 
                         <div className="p-6 flex flex-col justify-center">
                             <h3 className="text-sm font-semibold text-slate-500 mb-1">Certified Traceability</h3>
-                            <div className="text-3xl font-bold text-emerald-600 tracking-tight">100%</div>
+                            <div className="text-3xl font-bold text-emerald-600 tracking-tight">
+                                {isLoading ? <div className="h-8 w-16 bg-slate-100 animate-pulse rounded inline-block"></div> : `${metrics.traceabilityScore}%`}
+                            </div>
                             <div className="text-xs font-medium text-slate-400 mt-1">Actions sourcées et cryptées</div>
                         </div>
 
                         <div className="p-6 flex flex-col justify-center">
                             <h3 className="text-sm font-semibold text-slate-500 mb-1">Total Audited Events</h3>
-                            <div className="text-3xl font-bold text-slate-900 tracking-tight">14,250</div>
+                            <div className="text-3xl font-bold text-slate-900 tracking-tight">
+                                {isLoading ? <div className="h-8 w-24 bg-slate-100 animate-pulse rounded inline-block"></div> : metrics.totalAuditedEvents.toLocaleString()}
+                            </div>
                             <div className="text-xs font-medium text-slate-400 mt-1">Logs sécurisés (30 derniers jours)</div>
                         </div>
 
                         <div className="p-6 flex flex-col justify-center">
                             <h3 className="text-sm font-semibold text-slate-500 mb-1">AI Autonomy Index</h3>
-                            <div className="text-3xl font-bold text-slate-900 tracking-tight">85%</div>
+                            <div className="text-3xl font-bold text-slate-900 tracking-tight">
+                                {isLoading ? <div className="h-8 w-16 bg-slate-100 animate-pulse rounded inline-block"></div> : `${metrics.autonomyIndex}%`}
+                            </div>
                             <div className="text-xs font-medium text-slate-400 mt-1">Tasks completed without human override</div>
                         </div>
 
@@ -150,12 +159,16 @@ export default function ExecutiveLaunchpad() {
                 <div className="mt-8 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                     <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-white">
                         <h2 className="text-sm font-bold text-slate-900">Latest Audited Events</h2>
-                        <Link href="/agents/verytis-ops/logs" className="text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors flex items-center">
+                        <Link href="/timeline" className="text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors flex items-center">
                             View full ledger <ArrowRight className="w-4 h-4 ml-1" />
                         </Link>
                     </div>
-                    <div className="divide-y divide-gray-50">
-                        {MOCK_EVENTS.map((event) => (
+                    <div className="divide-y divide-gray-50 flex flex-col">
+                        {isLoading ? (
+                            <div className="p-8 text-center text-slate-400 text-sm">Loading latest events...</div>
+                        ) : recentEvents.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400 text-sm">No recent events found in the database.</div>
+                        ) : recentEvents.map((event) => (
                             <div key={event.id} className="p-4 sm:px-6 hover:bg-slate-50/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 
                                 {/* Left & Middle: Avatar + Context */}
@@ -165,22 +178,22 @@ export default function ExecutiveLaunchpad() {
                                     </div>
                                     <div>
                                         <p className="text-sm text-slate-700">
-                                            <span className="font-bold text-slate-900">{event.actor.name}</span> {event.action} in <span className="font-mono text-[13px] bg-slate-100 px-1 py-0.5 rounded text-slate-600">{event.target}</span>
+                                            <span className="font-bold text-slate-900">{event.actor.name}</span> <span className="uppercase text-[10px] mx-1 font-bold text-slate-400">{event.action}</span> in <span className="font-mono text-[13px] bg-slate-100 px-1 py-0.5 rounded text-slate-600">{event.target}</span>
                                         </p>
                                     </div>
                                 </div>
 
                                 {/* Right: Badge & Time */}
                                 <div className="flex items-center gap-3 shrink-0 ml-12 sm:ml-0">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${event.status === 'CLEAN' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                        event.status === 'REVIEWED' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                            'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${event.status === 'VERIFIED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                        event.status === 'BLOCKED' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                            'bg-slate-50 text-slate-700 border-slate-200'
                                         }`}>
                                         {event.status}
                                     </span>
                                     <div className="flex items-center text-xs font-medium text-slate-400 w-24 justify-end">
                                         <Clock className="w-3 h-3 mr-1" />
-                                        {event.time}
+                                        {formatTimeAgo(event.time)}
                                     </div>
                                 </div>
 

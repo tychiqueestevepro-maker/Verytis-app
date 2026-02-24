@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import useSWR from 'swr';
-import { Plus, Upload, MoreVertical, MoreHorizontal, Pencil, Key, Ban, Trash2, Mail, Shield, Hash, FileText, Download, Users, Search, Clock, CheckCircle, XCircle, Slack as SlackIcon, ChevronDown, Check, X } from 'lucide-react';
+import { Plus, Upload, MoreVertical, MoreHorizontal, Pencil, Key, Ban, Trash2, Mail, Shield, Hash, FileText, Download, Users, Search, Clock, CheckCircle, XCircle, Slack as SlackIcon, ChevronDown, Check, X, UserPlus } from 'lucide-react';
 import Link from 'next/link';
-import { Card, Button, StatusBadge, Modal } from '../ui';
+import { Card, Button, StatusBadge, Modal, EmptyState } from '../ui';
 import { SCOPES_CONFIG } from '@/lib/constants';
 
 const UsersAndRoles = () => {
@@ -338,6 +338,16 @@ const UsersAndRoles = () => {
             <Card className="overflow-visible">
                 {isLoading ? (
                     <div className="p-12 text-center text-slate-500">Loading users...</div>
+                ) : paginatedUsers.length === 0 ? (
+                    <div className="p-8">
+                        <EmptyState
+                            title={searchQuery ? "No members found" : "Your team is empty"}
+                            description={searchQuery ? `We couldn't find any members matching "${searchQuery}". Try a different search term.` : "Start building your organization by inviting your first team member."}
+                            icon={Users}
+                            actionText="Invite New User"
+                            onAction={() => setModalConfig({ type: 'invite' })}
+                        />
+                    </div>
                 ) : (
                     <table className="w-full text-xs text-left">
                         <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">

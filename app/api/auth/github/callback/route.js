@@ -133,8 +133,13 @@ export async function GET(req) {
         }
 
         // CASE 2: Org App Installation (Existing Logic)
-        // Retrieve Org ID from state if available, else fallback
-        const targetOrgId = state.organizationId || '5db477f6-c893-4ec4-9123-b12160224f70'; // Test Corp
+        // Retrieve Org ID from state if available
+        const targetOrgId = state.organizationId;
+
+        if (!targetOrgId) {
+            console.error('❌ Missing targetOrgId in GitHub callback state');
+            return NextResponse.json({ error: 'Missing organization context in OAuth state' }, { status: 400 });
+        }
 
         console.log(`Linking GitHub App for User ${userData.login} to Org ${targetOrgId}`);
 

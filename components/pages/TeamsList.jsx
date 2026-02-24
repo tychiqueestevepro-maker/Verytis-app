@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { Plus, MoreHorizontal, Shield, FileText, Download, Pencil, Users, Archive, Trash2, X, ChevronDown, Check } from 'lucide-react';
-import { Card, Button, Modal, SkeletonTeamItem } from '../ui';
+import { Card, Button, Modal, SkeletonTeamItem, EmptyState } from '../ui';
 import { SCOPES_CONFIG } from '@/lib/constants';
 
 const TeamsList = ({ userRole, currentUser }) => {
@@ -204,8 +204,18 @@ const TeamsList = ({ userRole, currentUser }) => {
                             );
                         }) : (
                             <tr>
-                                <td colSpan={userRole === 'Admin' ? "7" : "6"} className="px-6 py-12 text-center text-slate-400">
-                                    No teams found. Create one to get started.
+                                <td colSpan={userRole === 'Admin' ? "7" : "6"} className="px-6 py-12">
+                                    <EmptyState
+                                        title="No teams configured"
+                                        description="Teams allow you to group members and scope their audit visibility. Decisions made in linked channels will be automatically tracked."
+                                        icon={Users}
+                                        actionText={userRole === 'Admin' ? "Create New Team" : undefined}
+                                        onAction={userRole === 'Admin' ? () => {
+                                            setModalConfig({ type: 'create', team: {} });
+                                            setCurrentStep(1);
+                                            setTeamFormData({ name: '', description: '', type: 'operational', members: [], scopes: [], channels: [] });
+                                        } : undefined}
+                                    />
                                 </td>
                             </tr>
                         )}

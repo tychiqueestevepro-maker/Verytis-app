@@ -1,6 +1,6 @@
 'use client';
 
-import { Slack, Users, Mail, Hash } from 'lucide-react';
+import { Slack, Users, Mail, Hash, Cpu } from 'lucide-react';
 
 export const StatusBadge = ({ status }) => {
     const safeStatus = status || 'inactive';
@@ -39,6 +39,8 @@ export const PlatformIcon = ({ platform }) => {
             return <img src={getFavicon('github.com')} alt="GitHub" className="w-4 h-4" />;
         case 'trello':
             return <img src={getFavicon('trello.com')} alt="Trello" className="w-4 h-4" />;
+        case 'ai agent':
+            return <Cpu className="w-3.5 h-3.5 text-blue-600" />;
         case 'email':
             return <Mail className="w-3.5 h-3.5 text-slate-600" />;
         default:
@@ -99,4 +101,55 @@ export const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-4xl"
         </div>
     );
 };
+export const EmptyState = ({
+    title,
+    description,
+    icon: Icon,
+    actionText,
+    onAction,
+    secondaryActionText,
+    onSecondaryAction,
+    className = ""
+}) => (
+    <div className={`flex flex-col items-center justify-center p-12 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200 animate-in fade-in zoom-in-95 duration-500 ${className}`}>
+        {Icon && (
+            <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mb-6 ring-8 ring-slate-100/50 transition-all duration-300 hover:scale-110 hover:shadow-md">
+                <Icon className="w-8 h-8 text-blue-500" />
+            </div>
+        )}
+        <h3 className="text-lg font-bold text-slate-900 tracking-tight mb-2">{title}</h3>
+        <p className="text-sm text-slate-500 max-w-sm leading-relaxed mb-8">{description}</p>
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+            {actionText && onAction && (
+                <Button variant="primary" onClick={onAction}>
+                    {actionText}
+                </Button>
+            )}
+            {secondaryActionText && onSecondaryAction && (
+                <Button variant="secondary" onClick={onSecondaryAction}>
+                    {secondaryActionText}
+                </Button>
+            )}
+        </div>
+    </div>
+);
+
+export const DashboardEmptyState = ({
+    title,
+    description,
+    icon: Icon,
+    className = ""
+}) => (
+    <div className={`flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500 ${className}`}>
+        {Icon && (
+            <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center mb-3 border border-slate-100">
+                <Icon className="w-5 h-5 text-slate-400" />
+            </div>
+        )}
+        <h3 className="text-xs font-bold text-slate-900 mb-1 leading-tight">{title}</h3>
+        <p className="text-[10px] text-slate-500 max-w-[200px] leading-relaxed italic">{description}</p>
+    </div>
+);
+
 export * from './Skeleton';
+export * from './Input';

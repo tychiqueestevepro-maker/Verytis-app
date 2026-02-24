@@ -1,21 +1,29 @@
-
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { sendEmail } from '../../../../lib/email';
 
 export async function POST(req) {
-    const TEST_ORG_ID = '5db477f6-c893-4ec4-9123-b12160224f70';
     const body = await req.json();
     const { email, name, role } = body;
+
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+    const targetOrgId = profile.organization_id;
 
     if (!email) {
         return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
-
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
 
     try {
         let newUserId;
@@ -185,7 +193,7 @@ export async function POST(req) {
             .from('profiles')
             .upsert([{
                 id: newUserId,
-                organization_id: TEST_ORG_ID,
+                organization_id: targetOrgId,
                 email,
                 full_name: name || email.split('@')[0],
                 role: (role || 'member').toLowerCase(),

@@ -19,15 +19,8 @@ export function useSidebar() {
 }
 
 export function Providers({ children }) {
-    // Default mock user for initial load if needed, or null
-    const [currentUser, setCurrentUser] = useState({
-        id: 'mock-admin-id',
-        name: 'Tychique Esteve',
-        email: 'tychique.estevepro@gmail.com',
-        role: 'Admin',
-        avatar: null
-    });
-    const [currentRole, setCurrentRole] = useState('Admin'); // Keep for backward compat
+    const [currentUser, setCurrentUser] = useState(null);
+    const [currentRole, setCurrentRole] = useState('Member');
     const [activeModal, setActiveModal] = useState(null);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 

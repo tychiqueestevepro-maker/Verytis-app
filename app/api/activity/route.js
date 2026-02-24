@@ -1,48 +1,65 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * GET /api/activity?channelId=<uuid>
- *
- * Returns activity logs for a given monitored resource (channel/repo).
- * Query strategy mirrors api/teams/[teamId] for consistency:
- *   - Primary match:   resource_id = channelId
- *   - Metadata match:  metadata->>repo = resource.name (GitHub)
- *                      metadata->>slack_channel = resource.external_id (Slack)
- *
- * Auth: Access is scoped by channelId — you only see events for the resource you request.
- *       Page-level auth is handled by middleware (session check).
- */
 export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const channelId = searchParams.get('channelId');
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     try {
+        // Resolve profile for organization_id
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('id', user.id)
+            .single();
+
+        if (!profile?.organization_id) {
+            return NextResponse.json({ error: 'Organization not found' }, { status: 400 });
+        }
+
         // ── 1. Resolve Resource Details ─────────────────────────────────
-        // We need the resource name/type to build the OR query (same as Stack API)
         let resource = null;
+        let isAgent = false;
+
         if (channelId) {
-            const { data, error } = await supabase
+            // Priority: Check monitored resources with organization verification via integration join
+            const { data: resData } = await supabase
                 .from('monitored_resources')
-                .select('type, name, external_id')
+                .select('type, name, external_id, integration_id, integrations!inner(organization_id)')
                 .eq('id', channelId)
+                .eq('integrations.organization_id', profile.organization_id)
                 .single();
 
-            if (error && error.code !== 'PGRST116') {
-                console.error('Error resolving resource:', error);
+            if (resData) {
+                resource = resData;
+            } else {
+                // Check if it's an agent belonging to the current org
+                const { data: agentData } = await supabase
+                    .from('ai_agents')
+                    .select('id, name')
+                    .eq('id', channelId)
+                    .eq('organization_id', profile.organization_id)
+                    .single();
+
+                if (agentData) {
+                    resource = agentData;
+                    isAgent = true;
+                }
             }
-            resource = data;
+
+            if (!resource) {
+                return NextResponse.json({ events: [] });
+            }
         }
 
         // ── 2. Build Query ──────────────────────────────────────────────
-        // Model: Exactly mirrors api/teams/[teamId] query pattern
         let query = supabase
             .from('activity_logs')
             .select(`
@@ -53,34 +70,34 @@ export async function GET(req) {
                 metadata,
                 actor_id,
                 resource_id,
+                agent_id,
                 profiles:actor_id (
                     full_name,
                     email,
                     role
                 )
             `)
+            .eq('organization_id', profile.organization_id)
             .not('action_type', 'in', '("DISCUSSION","DISCUSSION_ANONYMOUS")');
 
         // ── 3. Apply Resource Filter ────────────────────────────────────
-        // Build OR conditions: match by resource_id OR by metadata fields
-        // This is the SAME pattern used by api/teams (proven to work)
         if (channelId) {
-            const conditions = [`resource_id.eq.${channelId}`];
-
-            if (resource) {
+            if (isAgent) {
+                query = query.eq('agent_id', channelId);
+            } else {
+                const conditions = [`resource_id.eq.${channelId}`];
                 if (resource.type === 'repo' && resource.name) {
-                    // GitHub: also match by repo name in metadata
                     conditions.push(`metadata->>repo.eq.${resource.name}`);
-                } else if (resource.external_id) {
-                    // Slack: also match by slack_channel ID in metadata
-                    conditions.push(`metadata->>slack_channel.eq.${resource.external_id}`);
                 }
+                if (resource.external_id) {
+                    conditions.push(`metadata->>slack_channel.eq.${resource.external_id}`);
+                    conditions.push(`metadata->>board_id.eq.${resource.external_id}`);
+                }
+                query = query.or(conditions.join(','));
             }
-
-            query = query.or(conditions.join(','));
         }
 
-        // ── 4. Execute (single order + limit, no duplicates) ────────────
+        // ── 4. Execute ──────────────────────────────────────────────────
         const { data: logs, error } = await query
             .order('created_at', { ascending: false })
             .limit(50);
@@ -159,6 +176,8 @@ function mapActionType(actionType) {
         case 'DISCUSSION_ANONYMOUS':
         case 'ATTEMPTED_ACTION_ANONYMOUS':
             return 'anonymous';
+        case 'AI_TELEMETRY':
+            return 'ai';
         default:
             return 'system';
     }
@@ -166,6 +185,7 @@ function mapActionType(actionType) {
 
 function formatAction(actionType) {
     switch (actionType) {
+        case 'AI_TELEMETRY': return 'AI Logical Step';
         case 'APPROVE': return 'Approval';
         case 'REJECT': return 'Rejection';
         case 'TRANSFER': return 'Transfer';

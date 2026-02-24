@@ -1,4 +1,4 @@
-const IcareLogo = ({ className = "w-8 h-8", color = "currentColor" }) => (
+const VerytisLogo = ({ className = "w-8 h-8", color = "currentColor" }) => (
     <svg
         version="1.0"
         xmlns="http://www.w3.org/2000/svg"
@@ -30,4 +30,4 @@ const IcareLogo = ({ className = "w-8 h-8", color = "currentColor" }) => (
     </svg>
 );
 
-export default IcareLogo;
+export default VerytisLogo;

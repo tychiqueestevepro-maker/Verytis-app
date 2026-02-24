@@ -1,26 +1,24 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 import { getValidGitHubToken } from '@/lib/github';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req) {
-    const { searchParams } = new URL(req.url);
-    let organizationId = searchParams.get('organizationId');
-    const teamId = searchParams.get('teamId');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Resolve Org ID
-    if (!organizationId && teamId) {
-        const { data } = await supabase.from('teams').select('organization_id').eq('id', teamId).single();
-        if (data) organizationId = data.organization_id;
-    }
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
 
-    const targetOrgId = organizationId || '5db477f6-c893-4ec4-9123-b12160224f70';
+    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+    const targetOrgId = profile.organization_id;
 
     try {
         const { data: integration } = await supabase.from('integrations')
@@ -41,36 +39,62 @@ export async function GET(req) {
         console.log('[DEBUG repos] token prefix:', access_token?.substring(0, 10));
 
         if (!access_token || !installation_id) {
-            return NextResponse.json({ repositories: [] });
+            const { data: existing } = await supabase.from('monitored_resources')
+                .select('*')
+                .eq('integration_id', integration.id)
+                .eq('type', 'repo');
+
+            return NextResponse.json({
+                repositories: (existing || []).map(r => ({
+                    id: r.external_id,
+                    name: r.name,
+                    private: true,
+                    url: '#',
+                    description: 'Resource from database',
+                    updated_at: r.last_active_at
+                }))
+            });
         }
 
-        // Fetch repositories accessible to the installation
-        const res = await fetch(`https://api.github.com/user/installations/${installation_id}/repositories`, {
-            headers: {
-                'Authorization': `Bearer ${access_token}`,
-                'Accept': 'application/vnd.github.v3+json'
+        try {
+            const res = await fetch(`https://api.github.com/user/installations/${installation_id}/repositories`, {
+                headers: {
+                    'Authorization': `Bearer ${access_token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                const repositories = (data.repositories || []).map(repo => ({
+                    id: repo.id,
+                    name: repo.full_name,
+                    private: repo.private,
+                    url: repo.html_url,
+                    description: repo.description,
+                    updated_at: repo.updated_at
+                }));
+                return NextResponse.json({ repositories });
             }
-        });
-
-        if (!res.ok) {
-            const errorText = await res.text();
-            console.error('GitHub API Error:', res.status, errorText);
-            throw new Error(`GitHub API responded with ${res.status}`);
+        } catch (e) {
+            console.error('GitHub API Failed:', e);
         }
 
-        const data = await res.json();
+        const { data: existing } = await supabase.from('monitored_resources')
+            .select('*')
+            .eq('integration_id', integration.id)
+            .eq('type', 'repo');
 
-        // Map to a simplified format
-        const repositories = (data.repositories || []).map(repo => ({
-            id: repo.id,
-            name: repo.full_name,
-            private: repo.private,
-            url: repo.html_url,
-            description: repo.description,
-            updated_at: repo.updated_at
-        }));
-
-        return NextResponse.json({ repositories });
+        return NextResponse.json({
+            repositories: (existing || []).map(r => ({
+                id: r.external_id,
+                name: r.name,
+                private: true,
+                url: '#',
+                description: 'Cached resource',
+                updated_at: r.last_active_at
+            }))
+        });
 
     } catch (error) {
         console.error('Error fetching GitHub repos:', error);

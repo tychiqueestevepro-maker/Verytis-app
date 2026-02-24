@@ -42,22 +42,25 @@ export async function GET(req) {
             // ignore
         }
 
-        const targetOrgId = state.organizationId || '5db477f6-c893-4ec4-9123-b12160224f70'; // Test Corp fallback
+        const { createClient } = require('@/lib/supabase/server');
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
 
-        const { createClient } = require('@supabase/supabase-js');
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY
-        );
+        if (!user) {
+            return NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL}?error=unauthorized`);
+        }
 
-        // We use 'upsert' assuming verification logic usually prevents duplicates, 
-        // but since unique constraint is (organization_id, provider), this is safe.
-        // Wait, init_schema calls it (organization_id, provider) ? No, schema says unique(organization_id, provider) ? 
-        // Let's check schema: unqiue(integration_id, external_id) is monitored_resources.
-        // integrations table doesn't have a unique constraint on (org, provider) in init_schema.sql provided earlier! 
-        // It has unique on ID. 
-        // I will assume for now we want to UPDATE if one exists for this provider, but without constraint it might dupe.
-        // I will check if one exists first.
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('id', user.id)
+            .single();
+
+        if (!profile?.organization_id) {
+            return NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL}?error=no_org`);
+        }
+
+        const targetOrgId = profile.organization_id;
 
         const { data: existingInt } = await supabase.from('integrations')
             .select('id')
@@ -73,7 +76,7 @@ export async function GET(req) {
             }).eq('id', existingInt.id);
         } else {
             await supabase.from('integrations').insert({
-                organization_id: TEST_ORG_ID,
+                organization_id: targetOrgId,
                 provider: 'slack',
                 name: data.team.name,
                 external_id: data.team.id,

@@ -1,29 +1,23 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * GET /api/trello/status?teamId=<uuid>
- * 
- * Check if Trello is connected for the given team/org.
- */
 export async function GET(req) {
-    const { searchParams } = new URL(req.url);
-    let organizationId = searchParams.get('organizationId');
-    const teamId = searchParams.get('teamId');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    if (!organizationId && teamId) {
-        const { data } = await supabase.from('teams').select('organization_id').eq('id', teamId).single();
-        if (data) organizationId = data.organization_id;
-    }
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
 
-    const targetOrgId = organizationId || '5db477f6-c893-4ec4-9123-b12160224f70';
+    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+    const targetOrgId = profile.organization_id;
 
     const { data } = await supabase.from('integrations')
         .select('id, settings, name')

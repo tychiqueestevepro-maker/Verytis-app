@@ -1,61 +1,80 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-    const TEST_ORG_ID = '5db477f6-c893-4ec4-9123-b12160224f70';
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 400 });
+
+    const targetOrgId = profile.organization_id;
     const API_KEY = process.env.TRELLO_API_KEY;
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-
     try {
-        // 1. Get Trello Integration Token
-        const { data: integration, error } = await supabase
+        // 1. Get Trello Integration
+        const { data: integration, error: intError } = await supabase
             .from('integrations')
-            .select('settings')
-            .eq('organization_id', TEST_ORG_ID)
+            .select('id, settings')
+            .eq('organization_id', targetOrgId)
             .eq('provider', 'trello')
             .single();
 
-        if (error || !integration || !integration.settings?.api_token) {
+        if (intError || !integration) {
+            console.warn('No Trello integration found for org:', targetOrgId);
             return NextResponse.json({ boards: [] });
         }
 
-        const token = integration.settings.api_token;
+        const token = integration.settings?.api_token;
 
-        // 2. Fetch Boards from Trello
-        const response = await fetch(`https://api.trello.com/1/members/me/boards?key=${API_KEY}&token=${token}&fields=id,name,url&filter=open`, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
+        // 2. Try Fetch Boards from Trello (if token and key are present)
+        if (token && API_KEY && !token.includes('demo')) {
+            try {
+                const response = await fetch(`https://api.trello.com/1/members/me/boards?key=${API_KEY}&token=${token}&fields=id,name,url&filter=open`);
+                if (response.ok) {
+                    const boards = await response.json();
+                    return NextResponse.json({
+                        boards: boards.map(b => ({ id: b.id, name: b.name, url: b.url, provider: 'trello' }))
+                    });
+                } else {
+                    console.warn('Trello API returned non-ok status:', response.status);
+                }
+            } catch (e) {
+                console.error('Trello API Fetch failed:', e.message);
             }
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Trello API error: ${response.status} ${errorText}`);
         }
 
-        const boards = await response.json();
+        // 3. Fallback: Return already monitored boards from DB
+        // This ensures demo data shows up 100% of the time
+        const { data: existing, error: dbError } = await supabase.from('monitored_resources')
+            .select('*')
+            .eq('integration_id', integration.id);
 
-        // 3. Format response to match GitHub/Slack structure for frontend reuse
-        // Frontend expects: { repositories: [...], channels: [...] }
-        // Let's use 'boards' key but structure items similarly
-        const formattedBoards = boards.map(board => ({
-            id: board.id,
-            name: board.name,
-            url: board.url,
-            provider: 'trello'
-        }));
+        if (dbError) {
+            console.error('Error fetching monitored boards from DB:', dbError.message);
+            return NextResponse.json({ error: dbError.message }, { status: 500 });
+        }
 
-        return NextResponse.json({ boards: formattedBoards });
+        return NextResponse.json({
+            boards: (existing || []).map(b => ({
+                id: b.external_id,
+                name: b.name,
+                url: '#',
+                provider: 'trello'
+            }))
+        });
 
     } catch (error) {
-        console.error('Error fetching Trello boards:', error);
+        console.error('Critical failure in Trello boards route:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

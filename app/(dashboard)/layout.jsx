@@ -6,35 +6,47 @@ import { Modal } from '@/components/ui';
 import IntegrationsSettings from '@/components/pages/IntegrationsSettings';
 import AdminSecuritySettings from '@/components/pages/AdminSecuritySettings';
 import PassportIDSettings from '@/components/pages/PassportIDSettings';
+import { createClient } from '@/lib/supabase/client';
+import { useEffect } from 'react';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 
 function DashboardContent({ children }) {
     const params = useParams();
-    const { currentRole, setCurrentRole } = useRole();
+    const router = useRouter();
+    const { currentRole, setCurrentRole, currentUser, setCurrentUser } = useRole();
     const { activeModal, setActiveModal } = useModal();
     const { isSidebarCollapsed, setIsSidebarCollapsed } = useSidebar();
+    const supabase = createClient();
 
-    const handleRoleSwitch = async (role) => {
-        try {
-            const response = await fetch('/api/dev/switch-role', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ role })
-            });
+    useEffect(() => {
+        const fetchUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', user.id)
+                    .single();
 
-            if (response.ok) {
-                // Reload the page to apply the new session
-                window.location.reload();
-            } else {
-                console.error('Failed to switch role');
-                // Fallback to just changing the role in state
-                setCurrentRole(role);
+                if (profile) {
+                    setCurrentUser({
+                        id: profile.id,
+                        name: profile.full_name || user.email.split('@')[0],
+                        email: user.email,
+                        initials: (profile.full_name?.substring(0, 2) || user.email.substring(0, 2)).toUpperCase(),
+                        role: profile.role.charAt(0).toUpperCase() + profile.role.slice(1),
+                        color: 'from-blue-500 to-indigo-600'
+                    });
+                }
             }
-        } catch (error) {
-            console.error('Role switch error:', error);
-            setCurrentRole(role);
-        }
+        };
+        fetchUser();
+    }, []);
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        router.push('/login');
     };
 
     return (
@@ -44,7 +56,8 @@ function DashboardContent({ children }) {
                 onToggleCollapse={setIsSidebarCollapsed}
                 onModalOpen={setActiveModal}
                 currentRole={currentRole}
-                onRoleChange={handleRoleSwitch}
+                user={currentUser}
+                onLogout={handleLogout}
             />
 
             <main className={`${isSidebarCollapsed ? 'ml-24' : 'ml-56'} p-8 min-h-screen transition-all duration-300 ease-out`}>

@@ -28,7 +28,12 @@ export async function POST(req) {
             const { data } = await supabase.from('teams').select('organization_id').eq('id', teamId).single();
             if (data) organizationId = data.organization_id;
         }
-        const targetOrgId = organizationId || '5db477f6-c893-4ec4-9123-b12160224f70';
+
+        const targetOrgId = organizationId;
+
+        if (!targetOrgId) {
+            return NextResponse.json({ error: 'Could not resolve organization context' }, { status: 400 });
+        }
 
         // Fetch Trello member info to get username (best-effort, don't block save)
         let member = {};

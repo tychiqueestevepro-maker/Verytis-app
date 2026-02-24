@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Activity, CheckCircle, Settings, FileText, UserPlus, FilterX, XCircle, RefreshCw, Edit2, GitCommit, GitPullRequest, GitMerge, Archive as ArchiveIcon, Paperclip, CheckSquare, Layout, Award, Kanban, ListChecks, ArrowRightCircle, Trophy, ChevronDown, Check } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { Card, Button, PlatformIcon } from '@/components/ui';
+import { Card, Button, PlatformIcon, EmptyState } from '@/components/ui';
 
 export default function TimelineFeed({ userRole }) {
     const { provider, resourceId } = useParams();
@@ -294,15 +294,11 @@ export default function TimelineFeed({ userRole }) {
                         <p className="text-xs font-medium">Loading events...</p>
                     </div>
                 ) : Object.keys(groupedEvents).length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                        <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center mb-3">
-                            <FilterX className="w-6 h-6 opacity-50" />
-                        </div>
-                        <p className="text-xs font-bold uppercase tracking-wide">No events recorded yet</p>
-                        <p className="text-[10px] mt-1 max-w-xs text-center">
-                            Activity will appear here once actions are taken.
-                        </p>
-                    </div>
+                    <EmptyState
+                        title="No events recorded yet"
+                        description="Activity from linked platforms will appear here once actions are taken or synchronized by the system."
+                        icon={Activity}
+                    />
                 ) : (
                     <div className="space-y-8">
                         {Object.entries(groupedEvents).map(([date, events]) => (

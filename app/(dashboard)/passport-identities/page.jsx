@@ -4,95 +4,54 @@ import React, { useState } from 'react';
 import { Search, Filter, ShieldCheck, Mail, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { useRole } from '@/lib/providers';
 
-// Fausses données pour démontrer les identités connectées
-const MOCK_IDENTITIES = [
-    {
-        id: 1,
-        name: 'Tychique Esteve',
-        email: 'tychique@verytis.com',
-        role: 'Admin',
-        department: 'Engineering',
-        passportStatus: 'Verified',
-        connections: [
-            { app: 'Slack', connected: true },
-            { app: 'GitHub', connected: true },
-            { app: 'Trello', connected: true },
-        ]
-    },
-    {
-        id: 2,
-        name: 'Elena Ross',
-        email: 'elena.ross@verytis.com',
-        role: 'Lead Developer',
-        department: 'Engineering',
-        passportStatus: 'Verified',
-        connections: [
-            { app: 'Slack', connected: true },
-            { app: 'GitHub', connected: true },
-            { app: 'Trello', connected: false },
-        ]
-    },
-    {
-        id: 3,
-        name: 'David Kim',
-        email: 'david.kim@verytis.com',
-        role: 'Security Analyst',
-        department: 'Security',
-        passportStatus: 'Warning',
-        connections: [
-            { app: 'Slack', connected: false },
-            { app: 'GitHub', connected: true },
-            { app: 'Trello', connected: false },
-        ]
-    },
-    {
-        id: 4,
-        name: 'Sarah Connor',
-        email: 'sarah.c@verytis.com',
-        role: 'Product Manager',
-        department: 'Product',
-        passportStatus: 'Verified',
-        connections: [
-            { app: 'Slack', connected: true },
-            { app: 'GitHub', connected: false },
-            { app: 'Trello', connected: true },
-        ]
-    },
-    {
-        id: 5,
-        name: 'Mike Ross',
-        email: 'mike.ross@verytis.com',
-        role: 'Product Designer',
-        department: 'Design',
-        passportStatus: 'Incomplete',
-        connections: [
-            { app: 'Slack', connected: false },
-            { app: 'GitHub', connected: false },
-            { app: 'Trello', connected: true },
-        ]
-    },
-    {
-        id: 6,
-        name: 'System Worker Auto',
-        email: 'bot-auto@verytis.local',
-        role: 'AI Agent',
-        department: 'Engineering',
-        passportStatus: 'Verified',
-        connections: [
-            { app: 'Slack', connected: true },
-            { app: 'GitHub', connected: true },
-            { app: 'Trello', connected: false },
-        ]
-    }
-];
-
 export default function PassportIdentitiesBoard() {
+    const [identities, setIdentities] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
 
-    const filteredIdentities = MOCK_IDENTITIES.filter(user =>
+    React.useEffect(() => {
+        const fetchIdentities = async () => {
+            try {
+                const res = await fetch('/api/users');
+                if (res.ok) {
+                    const data = await res.json();
+                    // Map API users to UI format
+                    const mapped = (data.users || []).map(u => ({
+                        id: u.id,
+                        name: u.name,
+                        email: u.email,
+                        role: u.role,
+                        department: u.managedTeams?.length > 0 ? u.managedTeams[0].name : (u.teams?.length > 0 ? u.teams[0].name : 'General'),
+                        passportStatus: u.connections?.length >= 2 ? 'Verified' : (u.connections?.length === 1 ? 'Warning' : 'Incomplete'),
+                        connections: [
+                            { app: 'Slack', connected: u.connections?.some(c => c.provider === 'slack') },
+                            { app: 'GitHub', connected: u.connections?.some(c => c.provider === 'github') },
+                            { app: 'Trello', connected: u.connections?.some(c => c.provider === 'trello') },
+                        ]
+                    }));
+                    setIdentities(mapped);
+                }
+            } catch (err) {
+                console.error("Failed to fetch identities", err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchIdentities();
+    }, []);
+
+    const filteredIdentities = identities.filter(user =>
         user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+                <div className="text-slate-500 font-medium">Loading Passport Board...</div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 pb-12 animate-in fade-in duration-300">
