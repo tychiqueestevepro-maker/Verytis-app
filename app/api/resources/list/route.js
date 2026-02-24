@@ -68,7 +68,7 @@ export async function GET() {
             });
         }
 
-        console.log(`Total resources: ${resources.length}, Filtered resources: ${orgResources.length}`);
+        console.log(`Total resources: ${orgResources.length}`);
 
         // Map to UI format
         const formattedResources = orgResources.map(r => {
@@ -99,13 +99,7 @@ export async function GET() {
         });
 
         return NextResponse.json({
-            resources: formattedResources,
-            debug_all: resources.map(r => ({
-                id: r.id,
-                name: r.name,
-                integration: r.integrations,
-                org_id_match: r.integrations?.organization_id === profile.organization_id
-            }))
+            resources: formattedResources
         });
     } catch (err) {
         console.error('Error fetching resources:', err);

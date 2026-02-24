@@ -7,7 +7,7 @@ import { Card, Button, PlatformIcon, Modal, EmptyState } from '../ui';
 import AuditLogo from '../image/LOGO.PNG-ICARE.svg';
 import SlackLogo from '../image/Slack Logo 2019.png';
 
-const GET_FAVICON = (domain) => `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=64`;
+const GET_FAVICON = (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
 
 const AuditDocumentation = ({ userRole, currentUser: propUser }) => {
     const [reportType, setReportType] = useState('Full Channel Audit');

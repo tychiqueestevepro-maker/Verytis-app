@@ -24,7 +24,7 @@ export const StatusBadge = ({ status }) => {
 };
 
 export const PlatformIcon = ({ platform }) => {
-    const getFavicon = (domain) => `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=64`;
+    const getFavicon = (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
 
     switch (platform.toLowerCase()) {
         case 'slack':

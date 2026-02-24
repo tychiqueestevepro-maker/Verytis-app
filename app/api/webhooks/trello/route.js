@@ -62,8 +62,7 @@ export async function POST(req) {
 
             if (base64Digest !== headerSignature) {
                 console.warn(`⚠️ Signature Mismatch! Expected: ${base64Digest}, Got: ${headerSignature}`);
-                // In production, uncomment the line below to block invalid signatures:
-                // return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+                return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
             } else {
                 // log('✅ Signature Verified');
             }
@@ -77,6 +76,30 @@ export async function POST(req) {
         if (!action) {
             // log('Testing connection (no action in body)');
             return NextResponse.json({ status: 'no_action' });
+        }
+
+        // 0. IDEMPOTENCY: Persistent check via Database
+        if (action.id) {
+            const { data: existingEvent } = await supabase
+                .from('webhook_events')
+                .select('id')
+                .eq('provider', 'trello')
+                .eq('external_id', action.id)
+                .maybeSingle();
+
+            if (existingEvent) {
+                console.log(`⏭️ Skipping duplicate Trello event: ${action.id}`);
+                return NextResponse.json({ status: 'already_processed' });
+            }
+
+            // Log entry into webhook_events
+            await supabase.from('webhook_events').insert({
+                provider: 'trello',
+                external_id: action.id,
+                event_type: action.type,
+                payload: body,
+                status: 'completed'
+            });
         }
 
         const actionType = action.type;

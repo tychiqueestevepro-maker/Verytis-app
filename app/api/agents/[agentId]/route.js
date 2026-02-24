@@ -34,6 +34,7 @@ export async function GET(req, { params }) {
             .from('activity_logs')
             .select('*')
             .eq('agent_id', agentId)
+            .eq('organization_id', profile.organization_id)
             .order('created_at', { ascending: false })
             .limit(20);
 

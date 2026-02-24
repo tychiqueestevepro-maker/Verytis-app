@@ -232,16 +232,27 @@ export async function POST(req) {
             const event = body.event;
             const eventId = body.event_id;
 
-            // Deduplicate events - Slack may retry if response is slow
-            // Use a simple in-memory cache (resets on server restart, but good enough for retries)
-            if (global.processedEvents?.has(eventId)) {
-                console.log(`⏭️ Skipping duplicate event: ${eventId}`);
+            // 0. IDEMPOTENCY: Persistent check via Database
+            const { data: existingEvent } = await supabase
+                .from('webhook_events')
+                .select('id')
+                .eq('provider', 'slack')
+                .eq('external_id', eventId)
+                .maybeSingle();
+
+            if (existingEvent) {
+                console.log(`⏭️ Skipping duplicate Slack event: ${eventId}`);
                 return NextResponse.json({ status: 'already_processed' });
             }
-            if (!global.processedEvents) global.processedEvents = new Set();
-            global.processedEvents.add(eventId);
-            // Clean old events after 5 minutes
-            setTimeout(() => global.processedEvents?.delete(eventId), 300000);
+
+            // Log entry into webhook_events for audit/idempotency
+            await supabase.from('webhook_events').insert({
+                provider: 'slack',
+                external_id: eventId,
+                event_type: event.type,
+                payload: body,
+                status: 'completed' // Slack is processed synchronously here
+            });
 
             console.log(`🔔 Event: ${event.type} | User: ${event.user} | EventID: ${eventId}`);
 

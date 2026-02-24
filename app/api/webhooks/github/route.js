@@ -40,16 +40,34 @@ export async function POST(req) {
             return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
         }
 
+        const deliveryId = req.headers.get('x-github-delivery');
+
+        // 1. IDEMPOTENCY: Check if this event was already processed
+        if (deliveryId) {
+            const { data: existing } = await supabase
+                .from('webhook_events')
+                .select('id')
+                .eq('provider', 'github')
+                .eq('external_id', deliveryId)
+                .maybeSingle();
+
+            if (existing) {
+                console.log(`⚠️ GitHub Webhook Replay Detected (Delivery: ${deliveryId}). Skipping.`);
+                return NextResponse.json({ status: 'already_processed' });
+            }
+        }
+
         const body = JSON.parse(rawBody);
         console.log(`📡 GitHub Webhook Received: ${eventType} - ${body.action || 'push'}`);
 
         // 2. QUEUE THE EVENT
         const { error: queueError } = await supabase.from('webhook_events').insert({
             provider: 'github',
+            external_id: deliveryId,
             event_type: eventType,
             payload: body,
             headers: {
-                'x-github-delivery': req.headers.get('x-github-delivery') || 'unknown',
+                'x-github-delivery': deliveryId || 'unknown',
                 'x-github-event': eventType
             },
             status: 'pending'

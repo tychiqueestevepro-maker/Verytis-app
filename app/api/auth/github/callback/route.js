@@ -82,6 +82,17 @@ export async function GET(req) {
             // ignore if not json
         }
 
+        // SECURITY: Verify state nonce against cookie to prevent CSRF
+        const cookieNonce = req.cookies.get('github_oauth_nonce')?.value;
+        if (!state.nonce || state.nonce !== cookieNonce) {
+            console.error('❌ GitHub OAuth State/Nonce mismatch or missing');
+            return NextResponse.json({ error: 'Security validation failed: state mismatch' }, { status: 403 });
+        }
+
+        // Clear the nonce cookie after verification
+        const responseHeaders = new Headers();
+        // Note: In Next.js App Router, we usually handle this via the returned NextResponse object
+
         const supabase = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL,
             process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -129,7 +140,9 @@ export async function GET(req) {
                     </body>
                 </html>
             `;
-            return new NextResponse(html, { headers: { 'Content-Type': 'text/html' } });
+            const finalResponse = new NextResponse(html, { headers: { 'Content-Type': 'text/html' } });
+            finalResponse.cookies.delete('github_oauth_nonce');
+            return finalResponse;
         }
 
         // CASE 2: Org App Installation (Existing Logic)
@@ -194,9 +207,12 @@ export async function GET(req) {
             </html>
         `;
 
-        return new NextResponse(html, {
+        const finalResponse = new NextResponse(html, {
             headers: { 'Content-Type': 'text/html' },
         });
+        finalResponse.cookies.delete('github_oauth_nonce');
+
+        return finalResponse;
 
     } catch (err) {
         console.error('OAuth Exception:', err);

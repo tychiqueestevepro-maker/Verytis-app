@@ -29,29 +29,27 @@ export async function GET(req) {
         let isAgent = false;
 
         if (channelId) {
-            // Priority: Check monitored resources with organization verification via integration join
-            const { data: resData } = await supabase
-                .from('monitored_resources')
-                .select('type, name, external_id, integration_id, integrations!inner(organization_id)')
-                .eq('id', channelId)
-                .eq('integrations.organization_id', profile.organization_id)
-                .single();
-
-            if (resData) {
-                resource = resData;
-            } else {
-                // Check if it's an agent belonging to the current org
-                const { data: agentData } = await supabase
+            // Fetch both in parallel to avoid sequential waits
+            const [resourceRes, agentRes] = await Promise.all([
+                supabase
+                    .from('monitored_resources')
+                    .select('type, name, external_id, integration_id, integrations!inner(organization_id)')
+                    .eq('id', channelId)
+                    .eq('integrations.organization_id', profile.organization_id)
+                    .maybeSingle(),
+                supabase
                     .from('ai_agents')
                     .select('id, name')
                     .eq('id', channelId)
                     .eq('organization_id', profile.organization_id)
-                    .single();
+                    .maybeSingle()
+            ]);
 
-                if (agentData) {
-                    resource = agentData;
-                    isAgent = true;
-                }
+            if (resourceRes.data) {
+                resource = resourceRes.data;
+            } else if (agentRes.data) {
+                resource = agentRes.data;
+                isAgent = true;
             }
 
             if (!resource) {
