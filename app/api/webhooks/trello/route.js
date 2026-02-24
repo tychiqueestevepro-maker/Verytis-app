@@ -78,28 +78,29 @@ export async function POST(req) {
             return NextResponse.json({ status: 'no_action' });
         }
 
-        // 0. IDEMPOTENCY: Persistent check via Database
+        // 0. ATOMIC INSERT (Race Condition Prevention)
+        // We use .upsert with onConflict on 'provider,external_id' which now has a UNIQUE constraint.
         if (action.id) {
-            const { data: existingEvent } = await supabase
-                .from('webhook_events')
-                .select('id')
-                .eq('provider', 'trello')
-                .eq('external_id', action.id)
-                .maybeSingle();
-
-            if (existingEvent) {
-                console.log(`⏭️ Skipping duplicate Trello event: ${action.id}`);
-                return NextResponse.json({ status: 'already_processed' });
-            }
-
-            // Log entry into webhook_events
-            await supabase.from('webhook_events').insert({
+            const { data: upsertData, error: upsertError } = await supabase.from('webhook_events').upsert({
                 provider: 'trello',
                 external_id: action.id,
                 event_type: action.type,
                 payload: body,
                 status: 'completed'
-            });
+            }, {
+                onConflict: 'provider,external_id',
+                ignoreDuplicates: true
+            }).select('id');
+
+            if (upsertError) {
+                console.error(`❌ Failed to queue Trello event: ${action.id}`, upsertError);
+                return NextResponse.json({ error: 'Failed to log event' }, { status: 500 });
+            }
+
+            if (!upsertData || upsertData.length === 0) {
+                console.log(`⚠️ Trello Webhook Replay Detected (Event: ${action.id}). Skipping.`);
+                return NextResponse.json({ status: 'already_processed' });
+            }
         }
 
         const actionType = action.type;

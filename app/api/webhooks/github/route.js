@@ -42,26 +42,9 @@ export async function POST(req) {
 
         const deliveryId = req.headers.get('x-github-delivery');
 
-        // 1. IDEMPOTENCY: Check if this event was already processed
-        if (deliveryId) {
-            const { data: existing } = await supabase
-                .from('webhook_events')
-                .select('id')
-                .eq('provider', 'github')
-                .eq('external_id', deliveryId)
-                .maybeSingle();
-
-            if (existing) {
-                console.log(`⚠️ GitHub Webhook Replay Detected (Delivery: ${deliveryId}). Skipping.`);
-                return NextResponse.json({ status: 'already_processed' });
-            }
-        }
-
-        const body = JSON.parse(rawBody);
-        console.log(`📡 GitHub Webhook Received: ${eventType} - ${body.action || 'push'}`);
-
-        // 2. QUEUE THE EVENT
-        const { error: queueError } = await supabase.from('webhook_events').insert({
+        // 1. ATOMIC INSERT (Race Condition Prevention)
+        // We use .upsert with onConflict on 'external_id' which now has a UNIQUE constraint.
+        const { error: queueError } = await supabase.from('webhook_events').upsert({
             provider: 'github',
             external_id: deliveryId,
             event_type: eventType,
@@ -71,6 +54,9 @@ export async function POST(req) {
                 'x-github-event': eventType
             },
             status: 'pending'
+        }, {
+            onConflict: 'provider,external_id',
+            ignoreDuplicates: true
         });
 
         if (queueError) {

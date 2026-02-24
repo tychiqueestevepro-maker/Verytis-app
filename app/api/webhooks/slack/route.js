@@ -232,27 +232,50 @@ export async function POST(req) {
             const event = body.event;
             const eventId = body.event_id;
 
-            // 0. IDEMPOTENCY: Persistent check via Database
-            const { data: existingEvent } = await supabase
-                .from('webhook_events')
-                .select('id')
-                .eq('provider', 'slack')
-                .eq('external_id', eventId)
-                .maybeSingle();
-
-            if (existingEvent) {
-                console.log(`⏭️ Skipping duplicate Slack event: ${eventId}`);
-                return NextResponse.json({ status: 'already_processed' });
-            }
-
-            // Log entry into webhook_events for audit/idempotency
-            await supabase.from('webhook_events').insert({
+            // 0. ATOMIC INSERT (Race Condition Prevention)
+            // We use .upsert with onConflict on 'provider,external_id' which now has a UNIQUE constraint.
+            const { error: upsertError } = await supabase.from('webhook_events').upsert({
                 provider: 'slack',
                 external_id: eventId,
                 event_type: event.type,
                 payload: body,
                 status: 'completed' // Slack is processed synchronously here
+            }, {
+                onConflict: 'provider,external_id',
+                ignoreDuplicates: true
             });
+
+            if (upsertError) {
+                console.error(`❌ Failed to queue Slack event: ${eventId}`, upsertError);
+                return NextResponse.json({ error: 'Failed to log event' }, { status: 500 });
+            }
+
+            // If the upsert ignored a duplicate, we should technically stop here if we want strict idempotency.
+            // But since Slack sends retries that we WANT to process if they failed before, 
+            // the UNIQUE constraint handles the "already exists" case.
+            // However, Supabase upsert with ignoreDuplicates doesn't return whether it inserted or not easily.
+            // Given the original logic was return already_processed, I'll stick to a slightly safer pattern if needed.
+            // Actually, ignoreDuplicates: true will just NOT insert. 
+            // BUT, the code below processes the event. If it's a replay, we should NOT process it.
+            // To fix this properly, I'll use a check AFTER upsert or use a special return.
+            // Actually, the most robust way in SQL is: INSERT ... ON CONFLICT DO NOTHING RETURNING id;
+            // If ID is null, it's a skip.
+
+            const { data: upsertData } = await supabase.from('webhook_events').upsert({
+                provider: 'slack',
+                external_id: eventId,
+                event_type: event.type,
+                payload: body,
+                status: 'completed'
+            }, {
+                onConflict: 'provider,external_id',
+                ignoreDuplicates: true
+            }).select('id');
+
+            if (!upsertData || upsertData.length === 0) {
+                console.log(`⚠️ Slack Webhook Replay Detected (Event: ${eventId}). Skipping.`);
+                return NextResponse.json({ status: 'already_processed' });
+            }
 
             console.log(`🔔 Event: ${event.type} | User: ${event.user} | EventID: ${eventId}`);
 

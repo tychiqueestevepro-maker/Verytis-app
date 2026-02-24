@@ -1,109 +1,102 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
+import { z } from 'zod';
 
-export const dynamic = 'force-dynamic';
+// Strict Schema for AI Ingestion
+const IngestionSchema = z.object({
+    trace_id: z.string().uuid().or(z.string().min(10)),
+    step: z.string().min(1),
+    message: z.string().max(10000).optional(),
+    metrics: z.object({
+        tokens_used: z.number().int().nonnegative().optional(),
+        cost_usd: z.number().nonnegative().optional(),
+        duration_ms: z.number().nonnegative().optional(),
+    }).passthrough().optional(),
+    cognitive_load: z.object({
+        retry_count: z.number().int().nonnegative().optional(),
+        tools_called: z.array(z.string()).optional(),
+    }).passthrough().optional(),
+    ai_context: z.object({
+        model: z.string().optional(),
+        provider: z.string().optional(),
+        temperature: z.number().min(0).max(2).optional(),
+    }).passthrough().optional(),
+});
 
 export async function POST(req) {
-    console.log('📡 [AI_TELEMETRY] Incoming ingestion request...');
+    const REQUEST_ID = crypto.randomUUID();
+    console.log(`📡 [AI_TELEMETRY] [${REQUEST_ID}] Incoming ingestion request...`);
 
     try {
+        // 0. PHYSICAL DOS PROTECTION: Content-Length check (1MB limit)
+        const contentLength = parseInt(req.headers.get('content-length') || '0');
+        if (contentLength > 1024 * 1024) { // 1MB
+            console.warn(`❌ [AI_TELEMETRY] [${REQUEST_ID}] Payload too large: ${contentLength} bytes`);
+            return NextResponse.json({ error: 'Payload Too Large (Max 1MB)' }, { status: 413 });
+        }
+
         // 1. Extract Bearer Token
         const authHeader = req.headers.get('authorization');
+        // ... rest of auth logic ...
+        // (Keeping existing auth logic below for continuity, but wrapped in try/catch)
+
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            console.log('❌ [AI_TELEMETRY] Missing or invalid authorization header');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const token = authHeader.split(' ')[1];
-        if (!token) {
-            console.log('❌ [AI_TELEMETRY] Empty token provided');
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // 2. Hash token to verify against DB
         const hashedKey = crypto.createHash('sha256').update(token).digest('hex');
 
-        // 3. Initialize Service Role Supabase
         const supabase = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL,
             process.env.SUPABASE_SERVICE_ROLE_KEY
         );
 
-        // 4. Authenticate Agent
         const { data: agent, error: agentError } = await supabase
             .from('ai_agents')
             .select('id, organization_id, status')
             .eq('api_key_hash', hashedKey)
             .single();
 
-        if (agentError || !agent) {
-            console.log('❌ [AI_TELEMETRY] Agent not found or invalid API key');
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        if (agentError || !agent || agent.status !== 'active') {
+            return NextResponse.json({ error: 'Unauthorized or Inactive' }, { status: 401 });
         }
 
-        if (agent.status !== 'active') {
-            console.log('❌ [AI_TELEMETRY] Agent is inactive');
-            return NextResponse.json({ error: 'Agent forbidden (inactive)' }, { status: 403 });
+        // 5. STRICT SCHEMA VALIDATION (Zod)
+        const rawBody = await req.json();
+        const validation = IngestionSchema.safeParse(rawBody);
+
+        if (!validation.success) {
+            console.error(`❌ [AI_TELEMETRY] [${REQUEST_ID}] Validation failed:`, validation.error.format());
+            return NextResponse.json({
+                error: 'Invalid Payload Schema',
+                details: validation.error.format()
+            }, { status: 400 });
         }
 
-        console.log(`🤖 [AI_TELEMETRY] Agent authenticated: ${agent.id} (Org: ${agent.organization_id})`);
+        const body = validation.data;
 
-        // 5. Parse Payload
-        const body = await req.json();
-        const { trace_id, step, metrics, cognitive_load, ai_context, message } = body;
-
-        // Validation simple
-        if (!trace_id || !step) {
-            console.log('❌ [AI_TELEMETRY] Invalid payload: trace_id and step are required');
-            return NextResponse.json({ error: 'trace_id and step are required' }, { status: 400 });
-        }
-
-        // Build Metadata payload for LLMOps Monitoring
-        const metadata = {
-            trace_id,
-            step,
-            message: message || '',
-            metrics: {
-                tokens_used: metrics?.tokens_used || 0,
-                cost_usd: metrics?.cost_usd || 0,
-                duration_ms: metrics?.duration_ms || 0,
-                ...metrics
-            },
-            cognitive_load: {
-                retry_count: cognitive_load?.retry_count || 0,
-                tools_called: cognitive_load?.tools_called || [],
-                ...cognitive_load
-            },
-            ai_context: {
-                model: ai_context?.model || 'unknown',
-                provider: ai_context?.provider || 'unknown',
-                temperature: ai_context?.temperature || 0,
-                ...ai_context
-            }
-        };
-
-        // 6. Asynchronous Insert (Non-blocking ingestion)
-        // We do not `await` to unblock the agent immediately for extreme speed.
-        // Wait, Vercel/Next.js edge/serverless might kill the process if we return early before promise resolves.
-        // To be safe in Next.js Serverless runtime, we must await it or use waitUntil.
-        // The prompt says: "asynchrone ultra-rapide sans bloquer l'agent". 
-        // We will execute the query and await it but return quick response. Actually awaiting is safer in Serverless.
-
-        await supabase.from('activity_logs').insert({
+        // 6. ATOMIC INSERT
+        const { error: insertError } = await supabase.from('activity_logs').insert({
             organization_id: agent.organization_id,
             agent_id: agent.id,
             action_type: 'AI_TELEMETRY',
-            summary: `Agent Step: ${step}`,
-            metadata: metadata
+            summary: `Agent Step: ${body.step}`,
+            metadata: {
+                ...body,
+                ingested_at: new Date().toISOString(),
+                request_id: REQUEST_ID
+            }
         });
 
-        console.log(`📡 [AI_TELEMETRY] Payload logged successfully.`);
+        if (insertError) {
+            console.error(`❌ [AI_TELEMETRY] [${REQUEST_ID}] DB Error:`, insertError);
+            return NextResponse.json({ error: 'Persistence Failure' }, { status: 500 });
+        }
 
-        return NextResponse.json({ success: true, ingested: true }, { status: 200 });
+        console.log(`✅ [AI_TELEMETRY] [${REQUEST_ID}] Ingested successfully.`);
+        return NextResponse.json({ success: true }, { status: 200 });
 
     } catch (error) {
-        console.log('❌ [AI_TELEMETRY] Ingestion error:', error);
+        console.error(`❌ [AI_TELEMETRY] [${REQUEST_ID}] System Error:`, error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
