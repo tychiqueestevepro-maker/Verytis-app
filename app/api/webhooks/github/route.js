@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
+import { scrubText } from '@/lib/security/scrubber';
 
 // Initialize Supabase Admin Client
 const supabase = createClient(
@@ -7,12 +9,33 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-import crypto from 'crypto';
+// ─── STEP 3 & 4: Hardened GitHub Webhook Handler ──────────────
+const MAX_PAYLOAD_BYTES = 5 * 1024 * 1024; // 5 MB
 
-// GitHub Webhook Handler - Final Validation after UI fix
 export async function POST(req) {
+    // ── STEP 3: OOM Prevention — reject oversized payloads before reading ──
+    const contentLength = parseInt(req.headers.get('content-length') || '0', 10);
+    if (contentLength > MAX_PAYLOAD_BYTES) {
+        console.error(`❌ GitHub Webhook payload too large: ${contentLength} bytes (max ${MAX_PAYLOAD_BYTES})`);
+        return NextResponse.json(
+            { error: 'Payload Too Large', max_bytes: MAX_PAYLOAD_BYTES },
+            { status: 413 }
+        );
+    }
+
     const rawBody = await req.text();
+
+    // Double-check actual body size (content-length can be spoofed)
+    if (Buffer.byteLength(rawBody, 'utf8') > MAX_PAYLOAD_BYTES) {
+        console.error(`❌ GitHub Webhook actual body exceeds ${MAX_PAYLOAD_BYTES} bytes`);
+        return NextResponse.json(
+            { error: 'Payload Too Large' },
+            { status: 413 }
+        );
+    }
+
     console.log(`📡 Incoming GitHub Webhook Body Length: ${rawBody.length}`);
+
     try {
         const signature = req.headers.get('x-hub-signature-256');
         const eventType = req.headers.get('x-github-event');
@@ -40,9 +63,11 @@ export async function POST(req) {
             return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
         }
 
-        const deliveryId = req.headers.get('x-hub-signature-256'); // Wait, x-github-delivery is better for ID
         const deliveryIdActual = req.headers.get('x-github-delivery');
-        const body = JSON.parse(rawBody);
+
+        // ── STEP 4: Scrub PII / leaked secrets from payload before DB insert ──
+        const scrubbedRawBody = scrubText(rawBody);
+        const body = JSON.parse(scrubbedRawBody);
 
         // 1. MULTI-TENANT ISOLATION: Resolve Organization ID
         const installationId = body.installation?.id;
@@ -66,8 +91,8 @@ export async function POST(req) {
             provider: 'github',
             external_id: deliveryIdActual,
             event_type: eventType,
-            payload: body,
-            organization_id: organizationId, // STRICT ISOLATION
+            payload: body, // scrubbed payload
+            organization_id: organizationId,
             headers: {
                 'x-github-delivery': deliveryIdActual || 'unknown',
                 'x-github-event': eventType

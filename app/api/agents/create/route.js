@@ -5,6 +5,40 @@ import { scrubText, scrubObject } from '@/lib/security/scrubber';
 
 export const dynamic = 'force-dynamic';
 
+// ─── STEP 2: Scrub secrets from visual_config before DB save ────
+// The React Flow canvas may contain API keys typed into ToolNode inputs.
+// We must strip them before persisting to Supabase.
+function sanitizeVisualConfig(config) {
+    if (!config || !config.nodes) return config;
+
+    const sanitized = JSON.parse(JSON.stringify(config)); // deep clone
+
+    for (const node of sanitized.nodes) {
+        if (!node.data) continue;
+
+        // Strip raw API key values from auth_requirement
+        if (node.data.auth_requirement) {
+            delete node.data.auth_requirement.value;
+            delete node.data.auth_requirement.raw_key;
+        }
+
+        // Strip any raw apiKey / token stored in node data
+        const sensitiveKeys = ['apiKey', 'api_key', 'token', 'secret', 'password', 'accessToken', 'bearer'];
+        for (const key of sensitiveKeys) {
+            if (node.data[key]) {
+                node.data[key] = '***REDACTED***';
+            }
+        }
+
+        // Remove onChange (non-serializable function ref from React)
+        delete node.data.onChange;
+        // Remove connectedProviders (runtime-only, not for DB)
+        delete node.data.connectedProviders;
+    }
+
+    return sanitized;
+}
+
 export async function POST(req) {
     try {
         // 1. Init SSR Client for Authed User
@@ -43,14 +77,14 @@ export async function POST(req) {
             hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
         }
 
-        // 5. DB Upsert logic
+        // 5. DB Upsert logic — sanitize visual_config to prevent secret leaks
         const agentData = {
             organization_id: profile.organization_id,
             name: name || 'Unnamed Agent',
             description: description || '',
             system_prompt: system_prompt || '',
             policies: policies || {},
-            visual_config: visual_config || null,
+            visual_config: sanitizeVisualConfig(visual_config),
             is_draft: is_draft || false,
             status: 'active'
         };
