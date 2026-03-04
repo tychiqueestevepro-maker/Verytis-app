@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.54",
+    "@ai-sdk/google": "^3.0.37",
     "@ai-sdk/openai": "^3.0.37",
     "@heroicons/react": "^2.2.0",
     "@sentry/nextjs": "^10.39.0",
