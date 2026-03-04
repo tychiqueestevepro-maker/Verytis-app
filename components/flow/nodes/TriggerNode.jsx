@@ -18,13 +18,13 @@ const TRIGGER_TYPES = [
 ];
 
 const APP_EVENT_SOURCES = [
-    { id: 'slack.message', label: 'Slack — Nouveau Message' },
-    { id: 'slack.reaction', label: 'Slack — Réaction ajoutée' },
-    { id: 'github.push', label: 'GitHub — Push' },
+    { id: 'github.push', label: 'GitHub — Push (Code)' },
     { id: 'github.pr', label: 'GitHub — Pull Request' },
-    { id: 'stripe.payment', label: 'Stripe — Paiement reçu' },
-    { id: 'email.inbound', label: 'Email — Réception' },
-    { id: 'custom', label: 'Custom Event...' },
+    { id: 'github.issue', label: 'GitHub — Issue' },
+    { id: 'stripe.payment', label: 'Stripe — Paiement Réussi' },
+    { id: 'stripe.subscription', label: 'Stripe — Nouvel Abonnement' },
+    { id: 'typeform.submit', label: 'Typeform — Formulaire Soumis' },
+    { id: 'custom', label: 'Autre événement personnalisé...' },
 ];
 
 const TriggerNode = ({ data, isConnectable }) => {
@@ -55,10 +55,9 @@ const TriggerNode = ({ data, isConnectable }) => {
 
     // App event branding
     const appEventDomains = {
-        'slack': 'slack.com',
         'github': 'github.com',
         'stripe': 'stripe.com',
-        'email': 'gmail.com',
+        'typeform': 'typeform.com',
     };
 
     const getAppEventDomain = () => {
@@ -264,7 +263,7 @@ const TriggerNode = ({ data, isConnectable }) => {
                             <Globe className={`w-3.5 h-3.5 ${theme.dot}`} />
                             <span className="text-[10px] font-bold text-slate-500 tracking-tight">Événement applicatif</span>
                         </div>
-                        <div className="relative">
+                        <div className="relative nodrag">
                             <label className="text-[9px] font-black uppercase text-slate-400 tracking-tighter block mb-1 px-0.5">Source de l'événement</label>
 
                             {/* Custom Dropdown Toggle */}
@@ -278,7 +277,7 @@ const TriggerNode = ({ data, isConnectable }) => {
 
                             {/* Custom Dropdown Menu */}
                             {isEventDropdownOpen && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden py-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
+                                <div className="absolute top-full left-0 right-[-20px] mt-1 bg-white border border-slate-200 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] z-[9999] py-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
                                     {APP_EVENT_SOURCES.map(s => (
                                         <div
                                             key={s.id}
@@ -287,7 +286,7 @@ const TriggerNode = ({ data, isConnectable }) => {
                                                 handleFieldChange('event_source', s.id);
                                                 setIsEventDropdownOpen(false);
                                             }}
-                                            className={`px-3 py-2 text-[10px] cursor-pointer transition-colors ${eventSource === s.id ? 'bg-violet-50 text-violet-700 font-bold' : 'text-slate-600 hover:bg-slate-50 font-medium'}`}
+                                            className={`px-3 py-2 text-[10px] shadow-sm cursor-pointer transition-colors ${eventSource === s.id ? 'bg-violet-50 text-violet-700 font-bold' : 'text-slate-600 hover:bg-slate-50 font-medium'}`}
                                         >
                                             {s.label}
                                         </div>
