@@ -118,7 +118,7 @@ export default function AgentBuilder() {
                     setAgentId(data.agent.id);
                     setAgentName(data.agent.name);
                     if (data.agent.visual_config) {
-                        setNodes(data.agent.visual_config.nodes || []);
+                        setNodes(hydrateNodes(data.agent.visual_config.nodes || []));
                         setEdges(data.agent.visual_config.edges || []);
                     }
                 }
@@ -580,6 +580,19 @@ export default function AgentBuilder() {
         setSelectedNode((prev) => (prev && prev.id === nodeId ? { ...prev, data: { ...prev.data, ...newData } } : prev));
     }, [setNodes]);
 
+    // Re-attach onChange callbacks to nodes loaded from the DB.
+    // Without this, provider/model changes in the dropdown silently fail.
+    const hydrateNodes = useCallback((rawNodes) => {
+        return rawNodes.map((n) => ({
+            ...n,
+            data: {
+                ...n.data,
+                connectedProviders,
+                onChange: (key, val) => updateNodeData(n.id, { [key]: val }),
+            }
+        }));
+    }, [updateNodeData, connectedProviders]);
+
     const onDrop = useCallback(
         (event) => {
             event.preventDefault();
@@ -720,10 +733,11 @@ export default function AgentBuilder() {
                         <Sidebar
                             onSelectDraft={(draft) => {
                                 if (draft.visual_config) {
-                                    setNodes(draft.visual_config.nodes || []);
+                                    setNodes(hydrateNodes(draft.visual_config.nodes || []));
                                     setEdges(draft.visual_config.edges || []);
                                     setAgentName(draft.name);
                                     setAgentId(draft.id);
+                                    setSelectedNode(null);
                                     setTimeout(() => {
                                         if (reactFlowInstance) reactFlowInstance.fitView({ padding: 0.3, duration: 800 });
                                     }, 100);

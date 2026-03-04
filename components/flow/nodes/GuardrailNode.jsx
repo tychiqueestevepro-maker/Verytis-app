@@ -4,6 +4,11 @@ import { Shield, DollarSign, Database, Ban, Activity } from 'lucide-react';
 
 const GuardrailNode = ({ data, isConnectable }) => {
     const policies = data.policies || {};
+    // Normalize: support both old key (forbidden_words) and new key (forbidden_keywords)
+    const forbiddenKeywords = policies.forbidden_keywords?.length
+        ? policies.forbidden_keywords
+        : (policies.forbidden_words || []);
+    const blockedActions = policies.blocked_actions || [];
 
     return (
         <div className="bg-white border-2 border-slate-200 rounded-2xl shadow-sm hover:shadow-xl hover:border-rose-400 transition-all group overflow-hidden min-w-[220px]">
@@ -32,21 +37,35 @@ const GuardrailNode = ({ data, isConnectable }) => {
                     <div className="flex items-center gap-1.5 font-bold text-slate-600">
                         <DollarSign className="w-3 h-3 text-emerald-500" /> Budget
                     </div>
-                    <span className="font-mono text-slate-500">${policies.budget_daily_max?.toFixed(2) || '10.00'}</span>
+                    <span className="font-mono text-slate-500">
+                        {policies.budget_daily_max != null ? `$${policies.budget_daily_max.toFixed(2)}/jour` : '—'}
+                    </span>
                 </div>
 
                 <div className="flex items-center justify-between text-[10px]">
                     <div className="flex items-center gap-1.5 font-bold text-slate-600">
                         <Ban className="w-3 h-3 text-rose-500" /> Banned
                     </div>
-                    <span className="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded-md font-bold text-[9px]">
-                        {policies.forbidden_keywords?.length || 0} words
+                    <span className={`px-1.5 py-0.5 rounded-md font-bold text-[9px] ${forbiddenKeywords.length > 0 ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-400'
+                        }`}>
+                        {forbiddenKeywords.length > 0 ? `${forbiddenKeywords.length} mots` : '0 mots'}
                     </span>
                 </div>
 
+                {blockedActions.length > 0 && (
+                    <div className="flex items-center justify-between text-[10px]">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-600">
+                            <Database className="w-3 h-3 text-orange-500" /> Bloqué
+                        </div>
+                        <span className="bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded-md font-bold text-[9px]">
+                            {blockedActions.length} actions
+                        </span>
+                    </div>
+                )}
+
                 <div className="flex items-center gap-1.5 text-[9px] text-slate-400 border-t border-slate-50 pt-2">
                     <Activity className="w-3 h-3 text-indigo-400" />
-                    <span>Real-time monitoring active</span>
+                    <span>Monitoring actif</span>
                 </div>
             </div>
 

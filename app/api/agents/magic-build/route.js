@@ -76,24 +76,43 @@ Tu DOIS impérativement répondre au format JSON valide.
 {
   "name": "Nom de l'agent",
   "description": "Valeur ajoutée métier",
-  "system_prompt": "DESCRIPTION DE POSTE DÉTAILLÉE",
+  "system_prompt": "DESCRIPTION DE POSTE DÉTAILLÉE (min 20 lignes)",
   "architecture": {
     "nodes": [
-      { "id": "t1", "type": "triggerNode", "position": { "x": 250, "y": 0 }, "data": { "label": "Nom du Trigger" } },
-      { "id": "s1", "type": "guardrailNode", "position": { "x": 250, "y": 250 }, "data": { "label": "Verytis Governance", "policies": { "budget_daily_max": 25.0, "forbidden_words": ["SSN", "PASSWORD"], "blocked_actions": ["DELETE"] } } },
-      { "id": "p1", "type": "placeholderNode", "position": { "x": 250, "y": 500 }, "data": { "label": "LLM DROPZONE" } }
+      { "id": "t1", "type": "triggerNode", "position": { "x": 250, "y": 0 }, "data": { "label": "Nom du Trigger", "description": "Rôle exact du trigger dans le flux" } },
+      {
+        "id": "s1", "type": "guardrailNode", "position": { "x": 250, "y": 250 },
+        "data": {
+          "label": "Verytis Governance",
+          "description": "Applique les politiques de sécurité et budget de l'agent",
+          "policies": {
+            "budget_daily_max": 25.0,
+            "budget_per_request_max": 2.0,
+            "forbidden_keywords": ["SSN", "PASSWORD", "SECRET"],
+            "blocked_actions": ["DELETE", "DROP_DATABASE"],
+            "require_approval": ["WRITE_PROD", "EXPORT_DATA"],
+            "allowed_scopes": ["PUBLIC", "INTERNAL"],
+            "max_consecutive_failures": 3,
+            "rate_limit_per_min": 60
+          }
+        }
+      },
+      { "id": "p1", "type": "placeholderNode", "position": { "x": 250, "y": 500 }, "data": { "label": "LLM DROPZONE", "description": "Cerveau central : orchestre les outils et génère les réponses" } },
+      { "id": "tool1", "type": "toolNode", "position": { "x": 250, "y": 750 }, "data": { "label": "Nom de l'outil", "description": "Action précise réalisée par cet outil", "logoDomain": "slack.com", "auth_requirement": { "type": "bearer_token", "label": "Slack Bot Token", "placeholder": "xoxb-..." } } }
     ],
     "edges": [
       { "id": "e1", "source": "t1", "target": "s1", "animated": true },
-      { "id": "e2", "source": "s1", "target": "p1", "animated": true }
+      { "id": "e2", "source": "s1", "target": "p1", "animated": true },
+      { "id": "e3", "source": "p1", "target": "tool1", "animated": true }
     ]
   }
 }
 
 ### RÈGLES D'AUTO-MAPPING
-- **TRIGGER MANDATORY**: Le flux DOIT commencer par un \`triggerNode\` à (Y=0).
-- **AGENT CENTRAL**: Le bloc central (\`placeholderNode\` ou \`llmNode\`) représente l'intelligence. Tu DOIS impérativement mettre le 'system_prompt' dans sa data.
-- **GOUVERNANCE**: Tu DOIS adapter les \`forbidden_words\` et \`blocked_actions\` au contexte métier de l'agent.
+- **TRIGGER MANDATORY**: Le flux DOIT commencer par un \`triggerNode\` à (Y=0). Il DOIT avoir une \`description\`.
+- **AGENT CENTRAL**: Le bloc central (\`placeholderNode\` ou \`llmNode\`) représente l'intelligence. Tu DOIS mettre le 'system_prompt' dans sa data ET une \`description\` claire.
+- **GOUVERNANCE SUR-MESURE**: Le Shield DOIT contenir des \`policies\` adaptées au contexte métier. Utilise TOUJOURS \`forbidden_keywords\` (jamais \`forbidden_words\`).
+- **DESCRIPTIONS OBLIGATOIRES**: CHAQUE nœud (triggerNode, guardrailNode, placeholderNode, toolNode) DOIT avoir un champ \`description\` renseigné.
 - **STRICT TOOL LIMIT**: N'ajoute QUE les outils explicitement mentionnés.
 - **Universal Icons**: Fournis toujours \`logoDomain\` (ex: \`slack.com\`) pour chaque outil.
 - **Typographie**: Utilise exclusivement **Verytis** (et non Verity's).`;

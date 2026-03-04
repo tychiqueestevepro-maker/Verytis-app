@@ -141,9 +141,6 @@ const LLMNodeV3 = ({ data, isConnectable }) => {
 
     return (
         <div className={`bg-white border-2 rounded-2xl transition-all group overflow-hidden min-w-[240px] ${getContainerClass()}`}>
-
-            ,StartLine:149,TargetContent:
-
             {/* Logo Zone */}
             <div className={`p-4 flex flex-col items-center gap-3 border-b border-slate-100/50 ${getHeaderClass()}`}>
                 <div className={`w-16 h-16 rounded-2xl transition-all group-hover:scale-110 duration-500 flex items-center justify-center overflow-hidden relative ${getLogoContainerClass()}`}>

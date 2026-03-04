@@ -143,8 +143,6 @@ const PlaceholderNode = ({ data, isConnectable }) => {
     return (
         <div className={`bg-white border-2 rounded-2xl w-[260px] transition-all duration-300 flex flex-col items-center justify-center p-5 gap-3 group relative overflow-hidden ${getContainerClass()}`}>
 
-            ,StartLine:113,TargetContent:
-
             {/* Header / Logo Zone */}
             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-500 relative shrink-0 ${getLogoClass()}`}>
                 {selectedProvider ? (

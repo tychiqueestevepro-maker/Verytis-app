@@ -173,9 +173,7 @@ const ToolNode = ({ data, isConnectable }) => {
                     </div>
                 )}
 
-                <div className="text-[9px] text-slate-400 font-medium leading-tight line-clamp-2">
-                    {description || 'Performs an automated action based on the agent output.'}
-                </div>
+
             </div>
 
             {/* Input Handle */}
