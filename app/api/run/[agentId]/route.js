@@ -48,46 +48,50 @@ function discoverTools(visualConfig) {
     const toolMap = {};
 
     for (const node of toolNodes) {
-        // OpenAI tool names must match ^[a-zA-Z0-9_-]{1,64}$
         const label = node.data?.label || 'tool';
         const toolId = label.toLowerCase().replace(/[^a-z0-9_]/g, '_').substring(0, 64);
         const description = node.data?.description || `Exécute l'outil "${label}".`;
 
-        // ─── NUCLEAR FIX: FORCE MANDATORY PARAMETER + EXPLICIT SCHEMA ───
         const toolDefinition = tool({
             name: toolId,
             description: description,
             parameters: z.object({
-                input_data: z.string().describe('Données obligatoires pour cet outil')
+                payload: z.string().describe("Le contenu JSON ou texte à envoyer à l'API/Webhook cible.")
             }),
-            execute: async ({ input_data }) => {
-                const id = toolId.toLowerCase();
-                if (id.includes('slack')) {
-                    return `[VERYTIS TOOL] Slack: Action effectuée avec succès. Données: ${input_data}`;
+            execute: async ({ payload }) => {
+                // ─── GENERIC HTTP EXECUTOR ───
+                // Extract Target URL from node credentials (API Key field often used for Webhooks in UI)
+                const targetUrl = node.data?.credentials?.api_key || node.data?.credentials?.webhook_url;
+
+                if (!targetUrl || !targetUrl.startsWith('http')) {
+                    return `[ERREUR] L'outil "${label}" n'est pas configuré correctement. URL manquante ou invalide.`;
                 }
-                if (id.includes('jira')) {
-                    return `[VERYTIS TOOL] Jira: Ticket géré. Données: ${input_data}`;
+
+                try {
+                    const response = await fetch(targetUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'User-Agent': 'Verytis-AI-Ops-Gateway/1.0'
+                        },
+                        body: JSON.stringify({
+                            tool: label,
+                            data: payload,
+                            timestamp: new Date().toISOString()
+                        })
+                    });
+
+                    if (!response.ok) {
+                        return `[ERREUR] L'appel à "${label}" a échoué (Statut: ${response.status} ${response.statusText}).`;
+                    }
+
+                    return `[SUCCÈS] L'action sur "${label}" a été transmise avec succès à l'URL cible.`;
+
+                } catch (error) {
+                    return `[ERREUR] Échec de connexion à l'outil "${label}": ${error.message}`;
                 }
-                return `[VERYTIS TOOL] Action "${label}" terminée. Données: ${input_data}`;
             }
         });
-
-        // ─── SHIM: INJECT EXPLICIT JSON SCHEMA ───
-        // Some canary versions of the AI SDK have issues serializing certain Zod versions.
-        // We inject the expected internal _jsonSchema property to be safe.
-        if (toolDefinition.parameters) {
-            toolDefinition.parameters._jsonSchema = {
-                type: 'object',
-                properties: {
-                    input_data: {
-                        type: 'string',
-                        description: 'Données obligatoires pour cet outil'
-                    }
-                },
-                required: ['input_data'],
-                additionalProperties: false
-            };
-        }
 
         toolMap[toolId] = toolDefinition;
     }
