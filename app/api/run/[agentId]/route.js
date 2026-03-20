@@ -488,7 +488,7 @@ export async function POST(req, { params }) {
     let resolvedOrgId = null;
 
     try {
-        const { agentId } = params;
+        const { agentId } = await params;
         const authHeader = req.headers.get('Authorization');
         const internalCronToken = req.headers.get('x-cron-token');
         

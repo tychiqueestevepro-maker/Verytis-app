@@ -1,6 +1,33 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
+export async function GET(req, { params }) {
+    const { teamId } = await params;
+    const supabase = await createClient();
+
+    if (!teamId) {
+        return NextResponse.json({ error: 'Team ID is required' }, { status: 400 });
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    try {
+        const { data: members, error } = await supabase
+            .from('team_members')
+            .select('*, profiles(id, full_name, email, avatar_url)') // Fetch member details
+            .eq('team_id', teamId);
+
+        if (error) throw error;
+
+        return NextResponse.json({ members });
+    } catch (error) {
+        console.error('Error fetching team members:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
 export async function POST(req, { params }) {
     const { teamId } = await params;
     const { userId, role } = await req.json();

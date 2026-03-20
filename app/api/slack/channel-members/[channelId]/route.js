@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { WebClient } from '@slack/web-api';
 
 export async function GET(req, { params }) {
-    const { channelId } = params;
+    const { channelId } = await params;
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/archive/[itemId] — Get full archived item data
 export async function GET(req, { params }) {
     try {
-        const { itemId } = params;
+        const { itemId } = await params;
         const supabase = await createClient();
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -39,7 +39,7 @@ export async function GET(req, { params }) {
 // DELETE /api/archive/[itemId] — Move to trash (30-day soft delete)
 export async function DELETE(req, { params }) {
     try {
-        const { itemId } = params;
+        const { itemId } = await params;
         const supabase = await createClient();
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req, { params }) {
   try {
-    const { agentId } = params;
+    const { agentId } = await params;
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -63,7 +63,7 @@ export async function POST(req, { params }) {
 
 export async function DELETE(req, { params }) {
   try {
-    const { agentId } = params;
+    const { agentId } = await params;
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req, { params }) {
     try {
-        const { agentId } = params;
+        const { agentId } = await params;
         const supabase = await createClient();
 
         // 1. Auth check

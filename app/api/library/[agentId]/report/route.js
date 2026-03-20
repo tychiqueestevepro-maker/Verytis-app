@@ -4,7 +4,7 @@ import nodemailer from 'nodemailer';
 
 export async function POST(req, { params }) {
     try {
-        const { agentId } = params;
+        const { agentId } = await params;
         const body = await req.json();
         const { message, agentName } = body;
 

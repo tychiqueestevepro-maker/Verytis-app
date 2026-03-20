@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req, { params }) {
     try {
-        const { agentId } = params;
+        const { agentId } = await params;
         const supabase = await createClient();
 
         // Check if agentId is a UUID
