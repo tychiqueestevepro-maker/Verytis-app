@@ -35,16 +35,19 @@ export async function GET(req) {
             const drivesData = await drivesRes.json();
 
             const drives = (drivesData.drives || []).map(d => ({
-                label: `[DRIVE ÉQUIPE] ${d.name}`,
+                label: d.name,
                 value: d.id
             }));
 
-            const folders = (foldersData.files || []).map(f => ({ 
-                label: f.driveId ? `[Équipe] ${f.name}` : f.name, 
-                value: f.id 
-            }));
+            // 3. Filter only folders belonging to Shared Drives (Enterprise level only)
+            const folders = (foldersData.files || [])
+                .filter(f => !!f.driveId)
+                .map(f => ({ 
+                    label: f.name, 
+                    value: f.id 
+                }));
 
-            // Merge: Drives first, then folders
+            // Merge: Drives first, then team folders
             return NextResponse.json([...drives, ...folders]);
         }
 
