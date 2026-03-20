@@ -16,13 +16,14 @@ const DEFAULT_PROVIDERS = [
     { id: 'openai', name: 'OpenAI', domain: 'openai.com', status: 'Not Configured', tokenPreview: '', logo: '/logos/openai.svg' },
     { id: 'anthropic', name: 'Anthropic Claude', domain: 'anthropic.com', status: 'Not Configured', tokenPreview: '', logo: '/logos/anthropic.svg' },
     { id: 'google', name: 'Google Gemini', domain: 'gemini.google.com', logo: '/logos/google-gemini.svg', status: 'Not Configured', tokenPreview: '' },
+    { id: 'google_workspace', name: 'Google Workspace', domain: 'workspace.google.com', logo: '/logos/google.svg', status: 'Not Configured' },
     { id: 'github', name: 'GitHub', domain: 'github.com', status: 'Not Configured', tokenPreview: '', logo: '/logos/github.svg' },
     { id: 'slack', name: 'Slack', domain: 'slack.com', status: 'Not Configured', tokenPreview: '', logo: '/logos/slack.svg' },
     { id: 'trello', name: 'Trello', domain: 'trello.com', status: 'Not Configured', tokenPreview: '', logo: '/logos/trello.svg' },
     { id: 'shopify', name: 'Shopify', domain: 'shopify.com', status: 'Not Configured', tokenPreview: '', logo: '/logos/shopify.svg' },
 ];
 
-const OAUTH_PROVIDERS = ['github', 'slack', 'trello', 'shopify'];
+const OAUTH_PROVIDERS = ['github', 'slack', 'trello', 'shopify', 'google_workspace'];
 
 export default function IntegrationsSettings() {
     const { currentUser } = useRole();
@@ -57,7 +58,7 @@ export default function IntegrationsSettings() {
                 console.warn("[SETTINGS] Origin mismatch ignored, but logging:", event.origin, "vs", window.location.origin);
             }
 
-            if (['SLACK_CONNECTED', 'GITHUB_CONNECTED', 'TRELLO_CONNECTED', 'TRELLO_LINKED', 'GITHUB_LINKED'].includes(event.data?.type)) {
+            if (['SLACK_CONNECTED', 'GITHUB_CONNECTED', 'TRELLO_CONNECTED', 'TRELLO_LINKED', 'GITHUB_LINKED', 'GOOGLE_CONNECTED', 'GOOGLE_WORKSPACE_CONNECTED'].includes(event.data?.type)) {
                 console.log("[SETTINGS] Connection SUCCESS detected, forcing re-fetch...", event.data.type);
                 mutate();
             }
@@ -329,6 +330,7 @@ export default function IntegrationsSettings() {
                                             {p.id === 'github' ? 'GitHub' : 
                                              p.id === 'slack' ? 'Slack' : 
                                              p.id === 'trello' ? 'Trello' : 
+                                             p.id === 'google_workspace' ? 'Google Workspace' :
                                              p.name}
                                         </h3>
                                     </div>
@@ -395,6 +397,7 @@ export default function IntegrationsSettings() {
 
                                                         const authUrl = p.id === 'github' ? `/api/auth/github/install?organizationId=${profile?.organization_id}&userId=${user.id}` :
                                                                         p.id === 'trello' ? `/api/auth/trello/login?userId=${user.id}&organizationId=${profile?.organization_id}` :
+                                                                        p.id === 'google_workspace' ? `/api/auth/google/login?userId=${user.id}&organizationId=${profile?.organization_id}` :
                                                                         `/api/slack/install?userId=${user.id}&organizationId=${profile?.organization_id}`;
                                                         openCenteredPopup(authUrl, `Connecter ${p.name}`);
                                                     } finally {

@@ -16,8 +16,10 @@ export default function IntegrationSidebar({ node, isOpen, onClose, onUpdate }) 
 
     // Safely extract node data
     const nodeData = node?.data || {};
-    const provider = nodeData.label?.toLowerCase().includes('github') ? 'github' : 
-                     nodeData.label?.toLowerCase().includes('slack') ? 'slack' : 
+    const provider = nodeData.label?.toLowerCase().includes('github') || (nodeData.logoDomain || '').includes('github') ? 'github' : 
+                     nodeData.label?.toLowerCase().includes('slack') || (nodeData.logoDomain || '').includes('slack') ? 'slack' : 
+                     (nodeData.label?.toLowerCase().includes('google') || nodeData.label?.toLowerCase().includes('workspace') || nodeData.label?.toLowerCase().includes('drive') || nodeData.label?.toLowerCase().includes('calendar') || nodeData.label?.toLowerCase().includes('gmail') || nodeData.label?.toLowerCase().includes('mail') || (nodeData.logoDomain || '').includes('google')) ? 'google_workspace' :
+                     nodeData.label?.toLowerCase().includes('trello') || (nodeData.logoDomain || '').includes('trello') ? 'trello' :
                      nodeData.type?.toLowerCase().includes('tool') ? 'tool' : null;
     const isLLM = nodeData.type === 'llmNode';
 
@@ -258,9 +260,10 @@ export default function IntegrationSidebar({ node, isOpen, onClose, onUpdate }) 
 
     const renderDisconnectedState = () => (
         <div className="flex flex-col items-center justify-center py-12 px-6 text-center gap-6">
-            <div className="w-20 h-20 rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100 shadow-inner">
+            <div className="w-20 h-20 rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100 shadow-inner overflow-hidden">
                 {provider === 'github' ? <Github className="w-10 h-10 text-slate-300" /> :
                  provider === 'slack' ? <Slack className="w-10 h-10 text-slate-300" /> :
+                 provider === 'google_workspace' ? <img src="/logos/google.svg" className="w-10 h-10 object-contain grayscale opacity-30" /> :
                  <Trello className="w-10 h-10 text-slate-300" />}
             </div>
             <div className="space-y-2">
@@ -304,14 +307,14 @@ export default function IntegrationSidebar({ node, isOpen, onClose, onUpdate }) 
                         const top = window.screenY + (window.outerHeight - height) / 2;
                         window.open(
                             authUrl,
-                            `Connecter ${provider}`,
+                            `Connecter ${provider === 'google_workspace' ? 'Google Workspace' : provider}`,
                             `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,status=yes`
                         );
                     }
                 }}
                 className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg shadow-black/10"
             >
-                <RefreshCw className="w-4 h-4" /> Reconnecter {provider}
+                <RefreshCw className="w-4 h-4" /> Reconnecter {provider === 'google_workspace' ? 'Google Workspace' : provider}
             </button>
         </div>
     );

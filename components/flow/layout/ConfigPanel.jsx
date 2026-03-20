@@ -9,7 +9,9 @@ import SlackConfig from './config/SlackConfig';
 import TrelloConfig from './config/TrelloConfig';
 import GitHubConfig from './config/GitHubConfig';
 import ShopifyConfig from './config/ShopifyConfig';
+import GoogleWorkspaceConfig from './config/GoogleWorkspaceConfig';
 import GovernanceConfig from './config/GovernanceConfig';
+import TargetingList from './config/TargetingList';
 import { PanelTagInput, PanelNumField } from './config/ConfigUtils';
 const DEFAULT_POLICIES = {
     budget_daily_max: null,
@@ -112,7 +114,15 @@ export default function ConfigPanel({ selectedNode, orgSettings, agentId, orgId,
             else if (rawLabel_low.includes('shopify')) brand = 'shopify';
             else if (rawLabel_low.includes('openai')) brand = 'openai';
             else if (rawLabel_low.includes('anthropic')) brand = 'anthropic';
-            else if (rawLabel_low.includes('google')) brand = 'google';
+            else if (rawLabel_low.includes('google') || 
+                     rawLabel_low.includes('workspace') || 
+                     rawLabel_low.includes('drive') || 
+                     rawLabel_low.includes('calendar') || 
+                     rawLabel_low.includes('agenda') ||
+                     rawLabel_low.includes('gmail') ||
+                     rawLabel_low.includes('mail') ||
+                     rawLabel_low.includes('email') ||
+                     (selectedNode.data?.logoDomain || '').includes('google')) brand = 'google_workspace';
         }
         return brand;
     }, [selectedNode, isGuardrail]);
@@ -149,6 +159,20 @@ export default function ConfigPanel({ selectedNode, orgSettings, agentId, orgId,
                     const res = await fetch('/api/integrations/github/metadata');
                     const data = await res.json();
                     if (res.ok) setMetadata(prev => ({ ...prev, repos: data.items || [] }));
+                } else if (detectedBrand === 'google_workspace') {
+                    const lowLabel = (selectedNode.data?.label || '').toLowerCase();
+                    const isDrive = lowLabel.includes('drive') || lowLabel.includes('fichier') || lowLabel.includes('stockage');
+                    const isCalendar = lowLabel.includes('calendar') || lowLabel.includes('agenda') || lowLabel.includes('calendrier');
+                    
+                    let endpoint = null;
+                    if (isDrive) endpoint = '/api/integrations/google/metadata?type=drive_folders';
+                    else if (isCalendar) endpoint = '/api/integrations/google/metadata?type=calendars';
+
+                    if (endpoint) {
+                        const res = await fetch(endpoint);
+                        const data = await res.json();
+                        if (res.ok) setMetadata(prev => ({ ...prev, google_items: data || [] }));
+                    }
                 }
             } catch (err) {
                 console.error('Failed to load tool metadata:', err);
@@ -369,7 +393,8 @@ export default function ConfigPanel({ selectedNode, orgSettings, agentId, orgId,
         verytis: { name: 'VERYTIS', color: 'text-rose-600', bg: 'bg-rose-600', lightBg: 'bg-rose-600/5', border: 'border-rose-600/20', logo: '/verytis-governance-logo.png' },
         openai: { name: 'OPENAI', color: 'text-[#10a37f]', bg: 'bg-[#10a37f]', lightBg: 'bg-[#10a37f]/5', border: 'border-[#10a37f]/20', domain: 'openai.com' },
         anthropic: { name: 'ANTHROPIC', color: 'text-[#D97757]', bg: 'bg-[#D97757]', lightBg: 'bg-[#D97757]/5', border: 'border-[#D97757]/20', domain: 'anthropic.com' },
-        google: { name: 'GOOGLE', color: 'text-[#4285F4]', bg: 'bg-[#4285F4]', lightBg: 'bg-[#4285F4]/5', border: 'border-[#4285F4]/20', domain: 'gemini.google.com' },
+        google: { name: 'GOOGLE WORKSPACE', color: 'text-[#4285F4]', bg: 'bg-[#4285F4]', lightBg: 'bg-[#4285F4]/5', border: 'border-[#4285F4]/20', domain: 'gemini.google.com' },
+        google_workspace: { name: 'GOOGLE WORKSPACE', color: 'text-[#4285F4]', bg: 'bg-[#4285F4]', lightBg: 'bg-[#4285F4]/5', border: 'border-[#4285F4]/20', logo: '/logos/google.svg', domain: 'workspace.google.com', targets: 'Dossiers/Agendas' },
         shopify: { name: 'SHOPIFY', color: 'text-[#008060]', bg: 'bg-[#008060]', lightBg: 'bg-[#008060]/5', border: 'border-[#008060]/20', domain: 'shopify.com', targets: 'Boutiques' },
         knowledge: { name: 'KNOWLEDGE', color: 'text-blue-600', bg: 'bg-blue-600', lightBg: 'bg-blue-50', border: 'border-blue-100', domain: 'database.verytis.com', targets: 'Sources' },
     };
@@ -518,14 +543,18 @@ export default function ConfigPanel({ selectedNode, orgSettings, agentId, orgId,
                                 />
                             )}
 
-                            {detectedBrand === 'shopify' && (
-                                <ShopifyConfig 
+                            {detectedBrand === 'google_workspace' && (
+                                <GoogleWorkspaceConfig 
                                     node={selectedNode}
+                                    theme={activeTheme}
+                                    metadata={metadata}
+                                    isLoadingMetadata={isLoadingMetadata}
+                                    onUpdate={handleInstantChange}
                                 />
                             )}
 
                             {/* Fallback for other tools (e.g. Notion) */}
-                            {!['slack', 'trello', 'github', 'shopify'].includes(detectedBrand) && (
+                            {!['slack', 'trello', 'github', 'shopify', 'google_workspace'].includes(detectedBrand) && (
                                 <TargetingList 
                                     targets={filteredTargets}
                                     isLoading={isLoadingTargets}

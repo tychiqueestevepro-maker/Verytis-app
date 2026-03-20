@@ -31,7 +31,6 @@ const TRIGGER_TYPES = [
 
 // Known OAuth providers and their display info
 const OAUTH_PROVIDERS = {
-    // Only expose providers/events that are concretely supported by our current webhook handlers + scopes.
     slack:   { label: 'Slack',   domain: 'slack.com',  events: ['message', 'app_mention', 'member_joined_channel', 'file_share'] },
     github:  { label: 'GitHub',  domain: 'github.com', events: ['push', 'pull_request'] },
     trello:  { label: 'Trello',  domain: 'trello.com', events: ['updateCard', 'addMemberToCard', 'addAttachmentToCard', 'updateCheckItemStateOnCard'] },
@@ -45,6 +44,15 @@ const OAUTH_PROVIDERS = {
             { value: 'inventory_levels/update', label: 'Rupture de stock' },
             { value: 'orders/cancelled', label: 'Commande annulée' },
             { value: 'customers/create', label: 'Nouveau client' }
+        ] 
+    },
+    google_workspace: { 
+        label: 'Google Workspace', 
+        domain: 'workspace.google.com', 
+        events: [
+            { value: 'gmail_new_message', label: '📧 Gmail : Nouvel email reçu' },
+            { value: 'drive_new_file', label: '🗂️ Drive : Nouveau fichier ajouté' },
+            { value: 'calendar_new_event', label: '📅 Calendar : Nouvel événement créé' }
         ] 
     },
 };
@@ -66,6 +74,14 @@ const TriggerNode = ({ data, isConnectable }) => {
     const [selectedEvent, setSelectedEvent] = useState(data.event_name || '');
     const [selectedConnectionId, setSelectedConnectionId] = useState(data.connection_id || '');
     const [cronExpression, setCronExpression] = useState(data.cron_expression || '0 8 * * *');
+    const [triggerConfig, setTriggerConfig] = useState(data.trigger_config || {});
+    const [metadata, setMetadata] = useState({ drive_folders: [], calendars: [] });
+    const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+
+    // Scheduled states
+    const [schFreq, setSchFreq] = useState(triggerConfig.frequency || 'daily');
+    const [schTime, setSchTime] = useState(triggerConfig.time || '08:00');
+    const [schTz, setSchTz] = useState(triggerConfig.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
 
     // Security for webhook mode
     const security = data.security || { requires_ip_whitelist: false, header_secret: null };
@@ -108,6 +124,51 @@ const TriggerNode = ({ data, isConnectable }) => {
         };
         fetchConnections();
     }, [triggerType]);
+
+    // Fetch Google metadata if needed
+    useEffect(() => {
+        if (selectedProvider !== 'google_workspace' || !['drive_new_file', 'calendar_new_event'].includes(selectedEvent)) return;
+        
+        const fetchGoogleMetadata = async () => {
+            setIsLoadingMetadata(true);
+            try {
+                const type = selectedEvent === 'drive_new_file' ? 'drive_folders' : 'calendars';
+                const res = await fetch(`/api/integrations/google/metadata?type=${type}`);
+                const data = await res.json();
+                if (res.ok) {
+                    setMetadata(prev => ({ 
+                        ...prev, 
+                        [type]: data || [] 
+                    }));
+                }
+            } catch (err) {
+                console.error('[TriggerNode] Failed to fetch Google metadata', err);
+            } finally {
+                setIsLoadingMetadata(false);
+            }
+        };
+        fetchGoogleMetadata();
+    }, [selectedProvider, selectedEvent]);
+
+    const updateScheduledConfig = (updates) => {
+        const next = { ...triggerConfig, ...updates };
+        setTriggerConfig(next);
+        if (data.onChange) data.onChange('trigger_config', next);
+
+        // Also update cron expression if frequency/time changed
+        const f = updates.frequency || schFreq;
+        const t = updates.time || schTime;
+        const [hour, minute] = t.split(':');
+        let cron = '';
+        if (f === 'hourly') cron = `0 * * * *`;
+        else if (f === 'daily') cron = `${parseInt(minute)} ${parseInt(hour)} * * *`;
+        else if (f === 'weekly') cron = `${parseInt(minute)} ${parseInt(hour)} * * 1`;
+        
+        if (cron) {
+            setCronExpression(cron);
+            if (data.onChange) data.onChange('cron_expression', cron);
+        }
+    };
 
     const handleTriggerTypeChange = (newType) => {
         setLocalTriggerType(newType);
@@ -173,12 +234,12 @@ const TriggerNode = ({ data, isConnectable }) => {
 
     // Display logo or icon
     const renderIcon = () => {
-        if (triggerType === 'app' && faviconDomain) {
+        if ((triggerType === 'app' || triggerType === 'scheduled') && faviconDomain) {
             return (
                 <div className="w-16 h-16 bg-white shadow-md border border-slate-100 rounded-2xl flex items-center justify-center overflow-hidden">
                     <img
-                        src={['shopify', 'github', 'slack', 'trello'].includes(selectedProvider?.toLowerCase()) 
-                            ? `/logos/${selectedProvider.toLowerCase()}.svg` 
+                        src={['shopify', 'github', 'slack', 'trello', 'google_workspace'].includes(selectedProvider?.toLowerCase()) 
+                            ? `/logos/${selectedProvider.toLowerCase() === 'google_workspace' ? 'google' : selectedProvider.toLowerCase()}.svg` 
                             : `https://www.google.com/s2/favicons?domain=${faviconDomain}&sz=128`}
                         alt={selectedProvider}
                         className="w-10 h-10 object-contain"
@@ -203,8 +264,8 @@ const TriggerNode = ({ data, isConnectable }) => {
                         Déclencheur Verytis
                     </div>
                     <div className="text-xs font-bold text-slate-900 line-clamp-1">
-                        {triggerType === 'app' && selectedProvider
-                            ? `${OAUTH_PROVIDERS[selectedProvider.toLowerCase()]?.label || selectedProvider} Trigger`
+                        {(triggerType === 'app' || triggerType === 'scheduled') && selectedProvider
+                            ? `${OAUTH_PROVIDERS[selectedProvider.toLowerCase()]?.label || selectedProvider} Routine`
                             : label}
                     </div>
                 </div>
@@ -236,14 +297,13 @@ const TriggerNode = ({ data, isConnectable }) => {
 
             {/* Dynamic Content Zone */}
             <div className="px-4 py-3 space-y-3">
-
-                {/* ─── App OAuth Mode ─── */}
-                {triggerType === 'app' && (
-                    <div className="space-y-3">
+                {/* ─── Shared Provider/Connection Selection (App & Scheduled) ─── */}
+                {(triggerType === 'app' || triggerType === 'scheduled') && (
+                    <div className="space-y-3 pb-3 border-b border-slate-50">
                         {/* Provider Selector */}
                         <div>
                             <label className="text-[9px] font-black uppercase text-slate-400 tracking-tighter block mb-1 px-0.5">
-                                Application (Provider)
+                                Application Source
                             </label>
                             <select
                                 value={selectedProvider}
@@ -257,35 +317,12 @@ const TriggerNode = ({ data, isConnectable }) => {
                             </select>
                         </div>
 
-                        {/* Event Selector */}
-                        {selectedProvider && (
-                            <div>
-                                <label className="text-[9px] font-black uppercase text-slate-400 tracking-tighter block mb-1 px-0.5">
-                                    Événement déclencheur
-                                </label>
-                                <select
-                                    value={selectedEvent}
-                                    onChange={e => handleEventChange(e.target.value)}
-                                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-700 outline-none focus:ring-1 focus:ring-violet-400 focus:border-violet-400 nodrag"
-                                >
-                                    <option value="">-- Choisir un événement --</option>
-                                    {availableEvents.map(evt => {
-                                        const val = typeof evt === 'string' ? evt : evt.value;
-                                        const label = typeof evt === 'string' ? evt.replace(/_/g, ' ') : evt.label;
-                                        return (
-                                            <option key={val} value={val}>{label}</option>
-                                        );
-                                    })}
-                                </select>
-                            </div>
-                        )}
-
                         {/* OAuth Connection Selector */}
                         {selectedProvider && (
                             <div>
                                 <div className="flex items-center justify-between mb-1 px-0.5">
                                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-tighter">
-                                        Connexion OAuth
+                                        Compte à utiliser
                                     </label>
                                     <a
                                         href="/settings?tab=integrations"
@@ -311,16 +348,8 @@ const TriggerNode = ({ data, isConnectable }) => {
                                             </span>
                                         </div>
                                         <p className="text-[9px] text-amber-600 leading-tight">
-                                            Connectez votre compte dans <strong>Paramètres → Intégrations</strong> pour utiliser ce trigger.
+                                            Connectez votre compte dans <strong>Paramètres → Intégrations</strong>.
                                         </p>
-                                        <a
-                                            href="/settings?tab=integrations"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center gap-1 text-[9px] font-black text-violet-600 hover:text-violet-800 transition-colors"
-                                        >
-                                            <ExternalLink className="w-3 h-3" /> Connecter {OAUTH_PROVIDERS[selectedProvider]?.label}
-                                        </a>
                                     </div>
                                 ) : (
                                     <select
@@ -331,10 +360,108 @@ const TriggerNode = ({ data, isConnectable }) => {
                                         <option value="">-- Choisir une connexion --</option>
                                         {connectedProviderConnections.map(conn => (
                                             <option key={conn.id} value={conn.id}>
-                                                {conn.account_label || conn.account_name || conn.metadata?.store_url || conn.metadata?.email || conn.provider}
+                                                {conn.account_label || conn.account_name || conn.metadata?.store_url || conn.metadata?.email}
                                             </option>
                                         ))}
                                     </select>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* ─── App OAuth Mode Specifics ─── */}
+                {triggerType === 'app' && (
+                    <div className="space-y-3">
+                        {/* Event Selector */}
+                        {selectedProvider && (
+                            <div>
+                                <label className="text-[9px] font-black uppercase text-slate-400 tracking-tighter block mb-1 px-0.5">
+                                    Événement déclencheur
+                                </label>
+                                <select
+                                    value={selectedEvent}
+                                    onChange={e => handleEventChange(e.target.value)}
+                                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-700 outline-none focus:ring-1 focus:ring-violet-400 focus:border-violet-400 nodrag"
+                                >
+                                    <option value="">-- Choisir un événement --</option>
+                                    {availableEvents.map(evt => {
+                                        const val = typeof evt === 'string' ? evt : evt.value;
+                                        const label = typeof evt === 'string' ? evt.replace(/_/g, ' ') : evt.label;
+                                        return (
+                                            <option key={val} value={val}>{label}</option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+                        )}
+
+                        {/* Google Specific Config Fields */}
+                        {selectedProvider === 'google_workspace' && selectedConnectionId && (
+                            <div className="space-y-3 p-3 bg-violet-50/50 border border-violet-100 rounded-xl animate-in fade-in slide-in-from-top-2 duration-300">
+                                {selectedEvent === 'gmail_new_message' && (
+                                    <div>
+                                        <label className="text-[9px] font-black uppercase text-violet-700 tracking-tighter block mb-1">
+                                            Filtre de recherche (optionnel)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={triggerConfig.filter_query || ''}
+                                            onChange={e => {
+                                                const next = { ...triggerConfig, filter_query: e.target.value };
+                                                setTriggerConfig(next);
+                                                handleFieldChange('trigger_config', next);
+                                            }}
+                                            placeholder="ex: subject:Urgent ou from:vip@..."
+                                            className="w-full px-2.5 py-1.5 bg-white border border-violet-200 rounded-lg text-[10px] outline-none focus:ring-1 focus:ring-violet-400 placeholder:text-slate-400 nodrag"
+                                        />
+                                    </div>
+                                )}
+
+                                {selectedEvent === 'drive_new_file' && (
+                                    <div>
+                                        <label className="text-[9px] font-black uppercase text-violet-700 tracking-tighter block mb-1">
+                                            Dossier Drive à surveiller
+                                        </label>
+                                        <select
+                                            value={triggerConfig.folder_id || ''}
+                                            onChange={e => {
+                                                const next = { ...triggerConfig, folder_id: e.target.value };
+                                                setTriggerConfig(next);
+                                                handleFieldChange('trigger_config', next);
+                                            }}
+                                            className="w-full px-2.5 py-1.5 bg-white border border-violet-200 rounded-lg text-[10px] font-bold text-slate-700 outline-none focus:ring-1 focus:ring-violet-400 nodrag"
+                                        >
+                                            <option value="">-- Choisir un dossier --</option>
+                                            {metadata.drive_folders.map(f => (
+                                                <option key={f.value} value={f.value}>{f.label}</option>
+                                            ))}
+                                        </select>
+                                        {isLoadingMetadata && <p className="text-[8px] text-violet-400 mt-1 animate-pulse italic">Chargement des dossiers...</p>}
+                                    </div>
+                                )}
+
+                                {selectedEvent === 'calendar_new_event' && (
+                                    <div>
+                                        <label className="text-[9px] font-black uppercase text-violet-700 tracking-tighter block mb-1">
+                                            Agenda à surveiller
+                                        </label>
+                                        <select
+                                            value={triggerConfig.calendar_id || ''}
+                                            onChange={e => {
+                                                const next = { ...triggerConfig, calendar_id: e.target.value };
+                                                setTriggerConfig(next);
+                                                handleFieldChange('trigger_config', next);
+                                            }}
+                                            className="w-full px-2.5 py-1.5 bg-white border border-violet-200 rounded-lg text-[10px] font-bold text-slate-700 outline-none focus:ring-1 focus:ring-violet-400 nodrag"
+                                        >
+                                            <option value="">-- Choisir un agenda --</option>
+                                            {metadata.calendars.map(c => (
+                                                <option key={c.value} value={c.value}>{c.label}</option>
+                                            ))}
+                                        </select>
+                                        {isLoadingMetadata && <p className="text-[8px] text-violet-400 mt-1 animate-pulse italic">Chargement des agendas...</p>}
+                                    </div>
                                 )}
                             </div>
                         )}
@@ -435,22 +562,65 @@ const TriggerNode = ({ data, isConnectable }) => {
 
                 {/* ─── Scheduled Mode ─── */}
                 {triggerType === 'scheduled' && (
-                    <div className="space-y-2">
+                    <div className="space-y-4">
                         <div className="flex items-center gap-2">
-                            <Clock className={`w-3.5 h-3.5 ${theme.dot}`} />
+                            <Clock className={`w-3.5 h-3.5 ${theme.dot} animate-pulse`} />
                             <span className="text-[10px] font-bold text-slate-500 tracking-tight">Exécution planifiée</span>
                         </div>
-                        <div>
-                            <label className="text-[9px] font-black uppercase text-slate-400 tracking-tighter block mb-1 px-0.5">Expression Cron</label>
-                            <input
-                                type="text"
-                                value={cronExpression}
-                                onChange={e => { setCronExpression(e.target.value); handleFieldChange('cron_expression', e.target.value); }}
-                                placeholder="0 8 * * *"
-                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-mono text-slate-700 outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-                            />
-                            <p className="text-[8px] text-slate-400 mt-1 font-mono px-0.5">ex: "0 8 * * *" = tous les jours à 8h</p>
+
+                        {/* Scheduling Grid */}
+                        <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                            <div className="space-y-1">
+                                <label className="text-[8px] font-black uppercase text-slate-400">Fréquence</label>
+                                <select
+                                    value={schFreq}
+                                    onChange={e => {
+                                        setSchFreq(e.target.value);
+                                        updateScheduledConfig({ frequency: e.target.value });
+                                    }}
+                                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold outline-none focus:ring-1 focus:ring-violet-400 nodrag"
+                                >
+                                    <option value="hourly">Horaire</option>
+                                    <option value="daily">Quotidien</option>
+                                    <option value="weekly">Hebdo (Lundi)</option>
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[8px] font-black uppercase text-slate-400">Heure (GMT)</label>
+                                <input
+                                    type="time"
+                                    value={schTime}
+                                    disabled={schFreq === 'hourly'}
+                                    onChange={e => {
+                                        setSchTime(e.target.value);
+                                        updateScheduledConfig({ time: e.target.value });
+                                    }}
+                                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:ring-1 focus:ring-violet-400 nodrag disabled:opacity-50"
+                                />
+                            </div>
+                            <div className="col-span-2 space-y-1">
+                                <label className="text-[8px] font-black uppercase text-slate-400">Fuseau Horaire</label>
+                                <select
+                                    value={schTz}
+                                    onChange={e => {
+                                        setSchTz(e.target.value);
+                                        updateScheduledConfig({ timezone: e.target.value });
+                                    }}
+                                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold outline-none focus:ring-1 focus:ring-violet-400 nodrag"
+                                >
+                                    <option value={schTz}>{schTz}</option>
+                                    <option value="UTC">UTC</option>
+                                    <option value="Europe/Paris">Europe/Paris</option>
+                                    <option value="America/New_York">America/New_York</option>
+                                </select>
+                            </div>
                         </div>
+
+                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-xl">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                            <span className="text-[9px] font-bold text-emerald-600">✅ Automatisé via le système Verytis</span>
+                        </div>
+
                         {/* Mandatory governance indicator for scheduled too */}
                         <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 border border-indigo-100 rounded-xl">
                             <Shield className="w-3 h-3 text-indigo-500 shrink-0" />
