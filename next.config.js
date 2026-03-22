@@ -5,6 +5,15 @@ const nextConfig = {
     async headers() {
         return [
             {
+                source: '/icon-trello.png',
+                headers: [
+                    {
+                        key: 'Access-Control-Allow-Origin',
+                        value: '*'
+                    }
+                ]
+            },
+            {
                 source: '/:path*',
                 headers: [
                     {
