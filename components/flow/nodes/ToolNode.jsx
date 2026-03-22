@@ -199,7 +199,7 @@ const ToolNode = ({ data, isConnectable }) => {
                         <Brain className="w-8 h-8 text-indigo-600" />
                     ) : domain ? (
                         <img
-                            src={`https://www.google.com/s2/favicons?domain=${domain}&sz=128`}
+                            src={domain === 'trello.com' ? '/icon-trello.png' : `https://www.google.com/s2/favicons?domain=${domain}&sz=128`}
                             alt={label}
                             className={`w-10 h-10 object-contain`}
                         />
@@ -284,7 +284,7 @@ const ToolNode = ({ data, isConnectable }) => {
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center gap-3 text-center transition-all group-hover:border-blue-200 group-hover:bg-blue-50/30">
                                     <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm border border-slate-100">
                                         <img 
-                                            src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
+                                            src={domain === 'trello.com' ? '/icon-trello.png' : `https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
                                             className="w-5 h-5 grayscale group-hover:grayscale-0 transition-all"
                                             alt=""
                                         />
@@ -378,7 +378,7 @@ const ToolNode = ({ data, isConnectable }) => {
                                             <>
                                                 <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center p-1 shadow-sm">
                                                     <img 
-                                                        src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
+                                                        src={domain === 'trello.com' ? '/icon-trello.png' : `https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
                                                         className="w-4 h-4 object-contain"
                                                         alt=""
                                                     />

@@ -251,9 +251,10 @@ const TriggerNode = ({ data, isConnectable }) => {
             return (
                 <div className="w-16 h-16 bg-white shadow-md border border-slate-100 rounded-2xl flex items-center justify-center overflow-hidden">
                     <img
-                        src={['shopify', 'github', 'slack', 'trello', 'google_workspace'].includes(selectedProvider?.toLowerCase()) 
-                            ? `/logos/${selectedProvider.toLowerCase() === 'google_workspace' ? 'google' : selectedProvider.toLowerCase()}.svg` 
-                            : `https://www.google.com/s2/favicons?domain=${faviconDomain}&sz=128`}
+                        src={selectedProvider?.toLowerCase() === 'trello' ? '/icon-trello.png' :
+                             ['shopify', 'github', 'slack', 'google_workspace'].includes(selectedProvider?.toLowerCase()) 
+                                ? `/logos/${selectedProvider.toLowerCase() === 'google_workspace' ? 'google' : selectedProvider.toLowerCase()}.svg` 
+                                : `https://www.google.com/s2/favicons?domain=${faviconDomain}&sz=128`}
                         alt={selectedProvider}
                         className="w-10 h-10 object-contain"
                     />
