@@ -21,7 +21,7 @@ const ToolNode = ({ data, isConnectable }) => {
     React.useEffect(() => {
         const handleRefresh = (event) => {
             if (event.origin !== window.location.origin) return;
-            if (['SLACK_CONNECTED', 'GITHUB_CONNECTED', 'TRELLO_CONNECTED', 'TRELLO_LINKED', 'GITHUB_LINKED'].includes(event.data?.type)) {
+            if (['SLACK_CONNECTED', 'GITHUB_CONNECTED', 'TRELLO_CONNECTED', 'TRELLO_LINKED', 'GITHUB_LINKED', 'GOOGLE_WORKSPACE_CONNECTED'].includes(event.data?.type)) {
                 // If the builder parent already refreshes, this might be redundant but safer
                 mutate('/api/settings');
             }
@@ -45,6 +45,7 @@ const ToolNode = ({ data, isConnectable }) => {
 
     // Dynamic Branding Logic
     const toolMapping = {
+        'stripe': 'stripe.com',
         'lemlist': 'lemlist.com',
         'hubspot': 'hubspot.com',
         'salesforce': 'salesforce.com',
@@ -63,6 +64,9 @@ const ToolNode = ({ data, isConnectable }) => {
         'firebase.google': 'firebase.google.com',
         'supabase': 'supabase.com',
         'sql': 'postgresql.org',
+        'gmail': 'google.com',
+        'drive': 'google.com',
+        'calendar': 'google.com',
     };
 
     const getDomain = () => {
@@ -78,16 +82,35 @@ const ToolNode = ({ data, isConnectable }) => {
     const providerName = domain ? domain.split('.')[0] : 'tool';
     
     const connectedOrg = data.connectedProviders?.find(p => {
-        const pDomain = (p.domain || p.id)?.toLowerCase();
+        const pId = (p.id || '').toLowerCase();
+        const pDomain = (p.domain || '').toLowerCase();
         const targetDomain = domain?.toLowerCase();
-        return pDomain && targetDomain && (pDomain.includes(targetDomain) || targetDomain.includes(pDomain)) && 
+        
+        // Robust Google Match: matches if p.id or p.domain contains 'google' or 'workspace' 
+        // and targetDomain is google.com
+        const isGoogleProvider = pId.includes('google') || pId.includes('workspace') || pDomain.includes('google');
+        const isGoogleTarget = targetDomain === 'google.com' || 
+                               ['google', 'google_workspace', 'gmail', 'drive', 'calendar'].includes(providerName.toLowerCase());
+        
+        const isMatch = (pDomain && targetDomain && (pDomain.includes(targetDomain) || targetDomain.includes(pDomain))) ||
+                        (isGoogleProvider && isGoogleTarget);
+
+        return isMatch && 
                p.status === 'Connected' && (p.connection_type === 'team' || (!p.is_perso && p.connection_type !== 'personal'));
     });
 
     const connectedPerso = data.connectedProviders?.find(p => {
-        const pDomain = (p.domain || p.id)?.toLowerCase();
+        const pId = (p.id || '').toLowerCase();
+        const pDomain = (p.domain || '').toLowerCase();
         const targetDomain = domain?.toLowerCase();
-        return pDomain && targetDomain && (pDomain.includes(targetDomain) || targetDomain.includes(pDomain)) && 
+
+        const isGoogleProvider = pId.includes('google') || pId.includes('workspace') || pDomain.includes('google');
+        const isGoogleTarget = targetDomain === 'google.com';
+
+        const isMatch = (pDomain && targetDomain && (pDomain.includes(targetDomain) || targetDomain.includes(pDomain))) ||
+                        (isGoogleProvider && isGoogleTarget);
+
+        return isMatch && 
                p.status === 'Connected' && (p.connection_type === 'personal' || p.is_perso);
     });
 

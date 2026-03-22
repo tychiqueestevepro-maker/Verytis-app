@@ -21,9 +21,10 @@ const DEFAULT_PROVIDERS = [
     { id: 'slack', name: 'Slack', domain: 'slack.com', status: 'Not Configured', tokenPreview: '', logo: '/logos/slack.svg' },
     { id: 'trello', name: 'Trello', domain: 'trello.com', status: 'Not Configured', tokenPreview: '', logo: '/logos/trello.svg' },
     { id: 'shopify', name: 'Shopify', domain: 'shopify.com', status: 'Not Configured', tokenPreview: '', logo: '/logos/shopify.svg' },
+    { id: 'stripe', name: 'Stripe', domain: 'stripe.com', status: 'Not Configured', tokenPreview: '', logo: '/logos/stripe.svg' },
 ];
 
-const OAUTH_PROVIDERS = ['github', 'slack', 'trello', 'shopify', 'google_workspace'];
+const OAUTH_PROVIDERS = ['github', 'slack', 'trello', 'shopify', 'google_workspace', 'stripe'];
 
 export default function IntegrationsSettings() {
     const { currentUser } = useRole();
@@ -58,7 +59,7 @@ export default function IntegrationsSettings() {
                 console.warn("[SETTINGS] Origin mismatch ignored, but logging:", event.origin, "vs", window.location.origin);
             }
 
-            if (['SLACK_CONNECTED', 'GITHUB_CONNECTED', 'TRELLO_CONNECTED', 'TRELLO_LINKED', 'GITHUB_LINKED', 'GOOGLE_CONNECTED', 'GOOGLE_WORKSPACE_CONNECTED'].includes(event.data?.type)) {
+            if (['SLACK_CONNECTED', 'GITHUB_CONNECTED', 'TRELLO_CONNECTED', 'TRELLO_LINKED', 'GITHUB_LINKED', 'GOOGLE_CONNECTED', 'GOOGLE_WORKSPACE_CONNECTED', 'STRIPE_CONNECTED'].includes(event.data?.type)) {
                 console.log("[SETTINGS] Connection SUCCESS detected, forcing re-fetch...", event.data.type);
                 mutate();
             }
@@ -392,6 +393,12 @@ export default function IntegrationsSettings() {
                                                         if (p.id === 'shopify') {
                                                             setShopifyStoreUrl('');
                                                             setIsShopifyModalOpen(true);
+                                                            return;
+                                                        }
+
+                                                        if (p.id === 'stripe') {
+                                                            const authUrl = `/api/auth/stripe/login?userId=${user.id}&organizationId=${profile?.organization_id}`;
+                                                            openCenteredPopup(authUrl, `Connecter Stripe`);
                                                             return;
                                                         }
 

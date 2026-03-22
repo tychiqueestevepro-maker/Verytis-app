@@ -24,15 +24,30 @@ export default function IntegrationSidebar({ node, isOpen, onClose, onUpdate }) 
     const isLLM = nodeData.type === 'llmNode';
 
     const connectedOrg = nodeData.connectedProviders?.find(p => {
-        const pDomain = p.domain?.toLowerCase();
-        const nodeProvider = provider?.toLowerCase();
-        return pDomain?.includes(nodeProvider) && p.status === 'Connected' && !p.is_perso;
+        const pDomain = p.domain?.toLowerCase() || '';
+        const pId = p.id?.toLowerCase() || '';
+        const nodeProvider = provider?.toLowerCase() || ''; // 'google_workspace' or 'google'
+        
+        // Flexible matching for Google: 'google' in 'workspace.google.com' or 'google_workspace' in pId
+        const isGoogleMatch = (nodeProvider.includes('google') || nodeProvider.includes('workspace')) && 
+                              (pDomain.includes('google') || pId.includes('google') || pId.includes('workspace'));
+                              
+        const isMatch = isGoogleMatch || pDomain.includes(nodeProvider) || pId.includes(nodeProvider);
+
+        return isMatch && p.status === 'Connected' && !p.is_perso;
     });
 
     const connectedPerso = nodeData.connectedProviders?.find(p => {
-        const pDomain = p.domain?.toLowerCase();
-        const nodeProvider = provider?.toLowerCase();
-        return pDomain?.includes(nodeProvider) && p.status === 'Connected' && p.is_perso;
+        const pDomain = p.domain?.toLowerCase() || '';
+        const pId = p.id?.toLowerCase() || '';
+        const nodeProvider = provider?.toLowerCase() || '';
+
+        const isGoogleMatch = (nodeProvider.includes('google') || nodeProvider.includes('workspace')) && 
+                              (pDomain.includes('google') || pId.includes('google') || pId.includes('workspace'));
+
+        const isMatch = isGoogleMatch || pDomain.includes(nodeProvider) || pId.includes(nodeProvider);
+
+        return isMatch && p.status === 'Connected' && p.is_perso;
     });
 
     const isConnected = !!(connectedOrg || connectedPerso);

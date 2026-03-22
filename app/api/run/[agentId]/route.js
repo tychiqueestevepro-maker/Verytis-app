@@ -13,6 +13,8 @@ import { createClient } from '@/lib/supabase/server';
 import { getValidGitHubToken } from '@/lib/github/tokens';
 import { getValidShopifyToken } from '@/lib/shopify/tokens';
 import { getValidGoogleToken } from '@/lib/google/tokens';
+import { getValidStripeToken } from '@/lib/stripe/tokens';
+import { getStripeClient } from '@/lib/stripe';
 
 export const dynamic = 'force-dynamic';
 
@@ -203,6 +205,7 @@ function discoverTools(visualConfig, isSimulation = false, organizationId = null
         if ((appLabel.includes('drive') || logoDomain.includes('drive') || logoDomain.includes('google')) && config.target_id === 'auto') autoProviders.add('google_drive');
         if ((appLabel.includes('calendar') || logoDomain.includes('calendar') || logoDomain.includes('google')) && config.target_id === 'auto') autoProviders.add('google_calendar');
         if (appLabel.includes('workspace') || appLabel.includes('gmail') || logoDomain.includes('google')) autoProviders.add('google_workspace');
+        if (appLabel.includes('stripe') || logoDomain.includes('stripe')) autoProviders.add('stripe');
     }
 
     // --- STEP 2c: Inject Search Tools if Auto Mode is detected ---
@@ -429,6 +432,240 @@ function discoverTools(visualConfig, isSimulation = false, organizationId = null
                     body: JSON.stringify({ raw: encodedEmail })
                 });
                 return response.ok ? "[SUCCÈS] Email envoyé." : "[ERREUR] Échec de l'envoi.";
+            }
+        });
+    }
+
+    if (autoProviders.has('stripe')) {
+        const getStripe = async () => {
+             const token = await getValidStripeToken({ organizationId });
+             return getStripeClient(token);
+        };
+
+        toolMap['stripe_create_refund'] = tool({
+            description: "Crée un remboursement pour une charge Stripe.",
+            inputSchema: jsonSchema({
+                type: 'object',
+                properties: {
+                    charge_id: { type: 'string', description: "ID de la transaction (ch_...) ou du PaymentIntent (pi_...)." },
+                    amount: { type: 'number', description: "Montant à rembourser en centimes (optionnel, sinon total)." },
+                    reason: { type: 'string', enum: ['duplicate', 'fraudulent', 'requested_by_customer'], description: "Raison du remboursement." }
+                },
+                required: ['charge_id']
+            }),
+            execute: async ({ charge_id, amount, reason }) => {
+                const stripe = await getStripe();
+                if (!stripe) return "Connexion Stripe non configurée.";
+                const refund = await stripe.refunds.create({
+                    payment_intent: charge_id.startsWith('pi_') ? charge_id : undefined,
+                    charge: charge_id.startsWith('ch_') ? charge_id : undefined,
+                    amount: amount ? Math.round(amount) : undefined,
+                    reason: reason
+                });
+                return `[SUCCÈS] Remboursement effectué (ID: ${refund.id}). Statut: ${refund.status}`;
+            }
+        });
+
+        toolMap['stripe_update_subscription'] = tool({
+            description: "Modifie ou annule un abonnement client.",
+            inputSchema: jsonSchema({
+                type: 'object',
+                properties: {
+                    subscription_id: { type: 'string', description: "ID de l'abonnement (sub_...)." },
+                    action: { type: 'string', enum: ['cancel', 'cancel_at_period_end', 'reactivate'], description: "Action à effectuer." }
+                },
+                required: ['subscription_id', 'action']
+            }),
+            execute: async ({ subscription_id, action }) => {
+                const stripe = await getStripe();
+                if (!stripe) return "Connexion Stripe non configurée.";
+                
+                let result;
+                if (action === 'cancel') {
+                    result = await stripe.subscriptions.cancel(subscription_id);
+                } else if (action === 'cancel_at_period_end') {
+                    result = await stripe.subscriptions.update(subscription_id, { cancel_at_period_end: true });
+                } else {
+                    result = await stripe.subscriptions.update(subscription_id, { cancel_at_period_end: false });
+                }
+                return `[SUCCÈS] Abonnement ${subscription_id} mis à jour. Nouveau statut: ${result.status}`;
+            }
+        });
+
+        toolMap['stripe_get_financial_analytics'] = tool({
+            description: "Récupère des indicateurs financiers (MRR, Ventes, Churn) sur une période.",
+            inputSchema: jsonSchema({
+                type: 'object',
+                properties: {
+                    limit: { type: 'number', description: "Nombre maximum de transactions à analyser (défaut 100)." }
+                }
+            }),
+            execute: async ({ limit = 100 }) => {
+                const stripe = await getStripe();
+                if (!stripe) return "Connexion Stripe non configurée.";
+                
+                const customers = await stripe.customers.list({ limit: 1 });
+                const charges = await stripe.charges.list({ limit: limit });
+                const total = charges.data.reduce((acc, c) => acc + (c.paid ? c.amount : 0), 0);
+                
+                return `[ANALYTICS] Volume sur les ${charges.data.length} dernières transactions: ${total/100} ${charges.data[0]?.currency.toUpperCase() || 'EUR'}. Clients totaux: ${customers.data.length}+.`;
+            }
+        });
+
+        toolMap['stripe_manage_customer_portal'] = tool({
+            description: "Génère un lien vers le portail client pour gérer les cartes et abonnements.",
+            inputSchema: jsonSchema({
+                type: 'object',
+                properties: {
+                    customer_id: { type: 'string', description: "ID du client (cus_...)." },
+                    return_url: { type: 'string', description: "URL de retour après le portail." }
+                },
+                required: ['customer_id']
+            }),
+            execute: async ({ customer_id, return_url }) => {
+                const stripe = await getStripe();
+                if (!stripe) return "Connexion Stripe non configurée.";
+                const session = await stripe.billingPortal.sessions.create({
+                    customer: customer_id,
+                    return_url: return_url || 'https://verytis.ai/dashboard',
+                });
+                return `[PORTAIL] Lien de gestion généré: ${session.url}`;
+            }
+        });
+
+        toolMap['stripe_api_call'] = tool({
+            description: "Appelle n'importe quel endpoint de l'API Stripe Node.js (ex: resources='customers', method='list', args=[{limit:3}]). Très puissant pour l'exploration et les actions granulaires.",
+            inputSchema: jsonSchema({
+                type: 'object',
+                properties: {
+                    resource: { type: 'string', description: "La ressource Stripe (ex: 'customers', 'invoices', 'subscriptions', 'payouts', 'disputes', 'paymentIntents')." },
+                    method: { type: 'string', description: "La méthode à appeler (ex: 'list', 'retrieve', 'create', 'update', 'cancel')." },
+                    args: { type: 'array', description: "Tableau d'arguments passé à la méthode. Important: Respectez la signature de l'API Stripe Node.js." }
+                },
+                required: ['resource', 'method', 'args']
+            }),
+            execute: async ({ resource, method, args }) => {
+                const stripe = await getStripe();
+                if (!stripe) return "Connexion Stripe non configurée.";
+                
+                try {
+                    const target = stripe[resource];
+                    if (!target || typeof target[method] !== 'function') {
+                        return `[ERREUR] La ressource '${resource}' ou la méthode '${method}' n'existe pas dans le SDK Stripe.`;
+                    }
+                    
+                    console.log(`[STRIPE API] Calling stripe.${resource}.${method} with:`, JSON.stringify(args));
+                    const result = await target[method](...args);
+                    return `[SUCCÈS] Résultat de stripe.${resource}.${method} :\n${JSON.stringify(result, null, 2)}`;
+                } catch (err) {
+                    console.error(`[STRIPE API] Error:`, err.message);
+                    return `[ERREUR STRIPE] ${err.message}`;
+                }
+            }
+        });
+
+        toolMap['stripe_handle_dispute'] = tool({
+            description: "Récupère les détails d'un litige ou soumet des preuves (evidence) pour le défendre. Très utile pour l'automatisation du support client.",
+            inputSchema: jsonSchema({
+                type: 'object',
+                properties: {
+                    dispute_id: { type: 'string', description: "ID du litige (dp_...)." },
+                    evidence: { type: 'object', description: "Objet contenant les preuves (ex: customer_communication_rebuttal)." }
+                },
+                required: ['dispute_id']
+            }),
+            execute: async ({ dispute_id, evidence }) => {
+                const stripe = await getStripe();
+                if (!stripe) return "Stripe non connecté.";
+                if (evidence) {
+                    const result = await stripe.disputes.update(dispute_id, { evidence });
+                    return `[SUCCÈS] Preuves soumises pour le litige ${dispute_id}. Statut: ${result.status}`;
+                } else {
+                    const result = await stripe.disputes.retrieve(dispute_id);
+                    return `[LITIGE] Détails: ${JSON.stringify(result, null, 2)}`;
+                }
+            }
+        });
+
+        toolMap['stripe_modify_billing_cycle'] = tool({
+            description: "Modifie le cycle de facturation ou applique une remise (coupon) à un abonnement.",
+            inputSchema: jsonSchema({
+                type: 'object',
+                properties: {
+                    subscription_id: { type: 'string', description: "sub_..." },
+                    proration_behavior: { type: 'string', enum: ['create_prorations', 'none'], default: 'create_prorations' },
+                    coupon: { type: 'string', description: "Code du coupon à appliquer." },
+                    billing_cycle_anchor: { type: 'string', enum: ['now', 'unchanged'], description: "Reset du cycle." }
+                },
+                required: ['subscription_id']
+            }),
+            execute: async ({ subscription_id, proration_behavior, coupon, billing_cycle_anchor }) => {
+                const stripe = await getStripe();
+                if (!stripe) return "Stripe non connecté.";
+                const result = await stripe.subscriptions.update(subscription_id, {
+                    proration_behavior,
+                    coupon,
+                    billing_cycle_anchor: billing_cycle_anchor === 'now' ? 'now' : undefined
+                });
+                return `[SUCCÈS] Cycle de facturation modifié pour ${subscription_id}. Prochaine facture: ${new Date(result.current_period_end * 1000).toLocaleDateString()}`;
+            }
+        });
+
+        toolMap['stripe_refund_and_cancel'] = tool({
+            description: "Action combinée: Rembourse la dernière transaction et annule l'abonnement immédiatement.",
+            inputSchema: jsonSchema({
+                type: 'object',
+                properties: {
+                    subscription_id: { type: 'string', description: "sub_..." },
+                    reason: { type: 'string', description: "Raison du départ." }
+                },
+                required: ['subscription_id']
+            }),
+            execute: async ({ subscription_id, reason }) => {
+                const stripe = await getStripe();
+                if (!stripe) return "Stripe non connecté.";
+                
+                const sub = await stripe.subscriptions.retrieve(subscription_id);
+                const latest_invoice = sub.latest_invoice;
+                
+                let refund_status = "Non applicable (pas de facture récente)";
+                if (latest_invoice) {
+                    const inv = await stripe.invoices.retrieve(latest_invoice);
+                    if (inv.payment_intent) {
+                        const refund = await stripe.refunds.create({ payment_intent: inv.payment_intent });
+                        refund_status = `Remboursement ${refund.status} (ID: ${refund.id})`;
+                    }
+                }
+
+                await stripe.subscriptions.cancel(subscription_id);
+                return `[SUCCÈS] Client résilié. ${refund_status}. Raison: ${reason || 'Non spécifiée'}`;
+            }
+        });
+
+        toolMap['stripe_financial_audit'] = tool({
+            description: "Génère un bilan financier flash: Revenus bruts, frais Stripe et remboursements sur les N derniers jours.",
+            inputSchema: jsonSchema({
+                type: 'object',
+                properties: {
+                    days: { type: 'number', default: 30, description: "Période d'audit en jours." }
+                }
+            }),
+            execute: async ({ days = 30 }) => {
+                const stripe = await getStripe();
+                if (!stripe) return "Stripe non connecté.";
+                
+                const created = { gte: Math.floor(Date.now() / 1000) - (days * 24 * 60 * 60) };
+                const transactions = await stripe.balanceTransactions.list({ created, limit: 100 });
+                
+                let gross = 0; let fee = 0; let net = 0; let refunds = 0;
+                transactions.data.forEach(tx => {
+                    gross += tx.amount;
+                    fee += tx.fee;
+                    net += tx.net;
+                    if (tx.type === 'refund') refunds += Math.abs(tx.amount);
+                });
+
+                return `[AUDIT ${days}j] Total Brut: ${gross/100}€ | Frais: ${fee/100}€ | Net: ${net/100}€ | Remboursements: ${refunds/100}€. (Basé sur les 100 derniers flux)`;
             }
         });
     }

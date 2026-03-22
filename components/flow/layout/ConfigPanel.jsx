@@ -114,6 +114,7 @@ export default function ConfigPanel({ selectedNode, orgSettings, agentId, orgId,
             else if (rawLabel_low.includes('shopify')) brand = 'shopify';
             else if (rawLabel_low.includes('openai')) brand = 'openai';
             else if (rawLabel_low.includes('anthropic')) brand = 'anthropic';
+            else if (rawLabel_low.includes('stripe')) brand = 'stripe';
             else if (rawLabel_low.includes('google') || 
                      rawLabel_low.includes('workspace') || 
                      rawLabel_low.includes('drive') || 
@@ -122,6 +123,10 @@ export default function ConfigPanel({ selectedNode, orgSettings, agentId, orgId,
                      rawLabel_low.includes('gmail') ||
                      rawLabel_low.includes('mail') ||
                      rawLabel_low.includes('email') ||
+                     rawProvider_low === 'google' ||
+                     rawProvider_low === 'gmail' ||
+                     rawProvider_low === 'drive' ||
+                     rawProvider_low === 'calendar' ||
                      (selectedNode.data?.logoDomain || '').includes('google')) brand = 'google_workspace';
         }
         return brand;
@@ -446,7 +451,13 @@ export default function ConfigPanel({ selectedNode, orgSettings, agentId, orgId,
                                     className="w-12 h-12 object-contain" 
                                 />
                             </div>
-                            {selectedNode.data.connectedProviders?.some(p => (p.provider === detectedBrand || p.id === detectedBrand) && p.status === 'Connected') && (
+                            {selectedNode.data.connectedProviders?.some(p => {
+                                const pId = (p.provider || p.id || '').toLowerCase();
+                                const pDomain = (p.domain || '').toLowerCase();
+                                const isGoogleProvider = pId.includes('google') || pId.includes('workspace') || pDomain.includes('google');
+                                const isGoogleBrand = detectedBrand === 'google_workspace' || detectedBrand === 'google';
+                                return (pId === detectedBrand) || (isGoogleProvider && isGoogleBrand);
+                            }) && (
                                 <div className="absolute -bottom-1 -right-1 bg-white p-1 rounded-full shadow-lg border border-slate-100">
                                     <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center"><CheckCircle2 className="w-3 h-3 text-white" /></div>
                                 </div>

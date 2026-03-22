@@ -1,5 +1,6 @@
 'use client';
 import React, { memo, useState, useEffect } from 'react';
+import useSWR from 'swr';
 import { Handle, Position } from '@xyflow/react';
 import { Zap, Radio, Copy, Check, Clock, Globe, ChevronDown, ChevronUp, Shield, Lock, Webhook, AlertCircle, CheckCircle2, RefreshCw, ExternalLink } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
@@ -55,6 +56,20 @@ const OAUTH_PROVIDERS = {
             { value: 'calendar_new_event', label: '📅 Calendar : Nouvel événement créé' }
         ] 
     },
+    stripe: {
+        label: 'Stripe',
+        domain: 'stripe.com',
+        events: [
+            { value: 'checkout.session.completed', label: '💰 Vente : Session terminée', description: 'Récupère les détails du client et du produit vendu.' },
+            { value: 'checkout.session.expired', label: '⏳ Abandon : Panier expiré', description: 'Déclenche une relance automatique pour panier abandonné.' },
+            { value: 'invoice.paid', label: '🧾 Facturation : Facture payée', description: 'Idéal pour déclencher une livraison sur Shopify.' },
+            { value: 'charge.refunded', label: '🔄 Retour : Remboursement effectué', description: 'Pour ajuster les stocks ou révoquer des accès.' },
+            { value: 'customer.subscription.deleted', label: '📉 Churn : Abonnement annulé', description: 'Déclenche une procédure de rétention client.' },
+            { value: 'customer.subscription.updated', label: '🔄 Abonnement : Changement de plan', description: 'Pour synchroniser les accès ou CRM.' },
+            { value: 'dispute.opened', label: '🚨 Alerte : Litige ouvert', description: 'Déclenchement immédiat pour défense automatique.' },
+            { value: 'payout.failed', label: '⚠️ Erreur : Virement échoué', description: 'Alerte immédiate pour le suivi financier.' }
+        ]
+    }
 };
 
 const TriggerNode = ({ data, isConnectable }) => {
@@ -70,7 +85,9 @@ const TriggerNode = ({ data, isConnectable }) => {
 
     // Sync from node data
     const [localTriggerType, setLocalTriggerType] = useState(data.trigger_type || 'webhook');
-    const [selectedProvider, setSelectedProvider] = useState(data.provider || '');
+    const [selectedProvider, setSelectedProvider] = useState(
+        ['google', 'gmail', 'drive', 'calendar'].includes(data.provider) ? 'google_workspace' : (data.provider || '')
+    );
     const [selectedEvent, setSelectedEvent] = useState(data.event_name || '');
     const [selectedConnectionId, setSelectedConnectionId] = useState(data.connection_id || '');
     const [cronExpression, setCronExpression] = useState(data.cron_expression || '0 8 * * *');
@@ -100,30 +117,19 @@ const TriggerNode = ({ data, isConnectable }) => {
     };
     const theme = colorMap[currentType.color] || colorMap.emerald;
 
-    // Fetch OAuth connections from the DB when in 'app' mode
+    const fetcher = (url) => fetch(url).then(r => r.json());
+    const { data: settingsData } = useSWR('/api/settings', fetcher);
+
     useEffect(() => {
-        if (triggerType !== 'app') return;
-        const fetchConnections = async () => {
-            setIsLoadingConnections(true);
-            try {
-                const res = await fetch('/api/settings');
-                const json = await res.json();
-                // Prefer explicit user_connections (compat), otherwise derive from providers catalog
-                const connections =
-                    json.user_connections ||
-                    json.settings?.user_connections ||
-                    (Array.isArray(json.providers)
-                        ? json.providers.filter(p => p?.connection_type === 'team' || p?.connection_type === 'personal')
-                        : []);
-                setOauthConnections(connections);
-            } catch (err) {
-                console.error('[TriggerNode] Failed to fetch OAuth connections', err);
-            } finally {
-                setIsLoadingConnections(false);
-            }
-        };
-        fetchConnections();
-    }, [triggerType]);
+        if (!settingsData) return;
+        const connections =
+            settingsData.user_connections ||
+            settingsData.settings?.user_connections ||
+            (Array.isArray(settingsData.providers)
+                ? settingsData.providers.filter(p => p?.connection_type === 'team' || p?.connection_type === 'personal')
+                : []);
+        setOauthConnections(connections);
+    }, [settingsData]);
 
     // Fetch Google metadata if needed
     useEffect(() => {
@@ -215,7 +221,14 @@ const TriggerNode = ({ data, isConnectable }) => {
     // Find connections filtered by selected provider
     const connectedProviderConnections = oauthConnections.filter(conn => {
         const p = (conn.provider || '').toLowerCase();
-        return !selectedProvider || p === selectedProvider.toLowerCase();
+        const sel = (selectedProvider || '').toLowerCase();
+        if (!sel) return true;
+        
+        // Flexible matching for Google: 'google' or 'google_workspace' or 'workspace'
+        if ((sel.includes('google') || sel.includes('workspace')) && 
+            (p.includes('google') || p.includes('workspace'))) return true;
+            
+        return p === sel;
     });
 
     // Status of the app trigger
@@ -312,7 +325,9 @@ const TriggerNode = ({ data, isConnectable }) => {
                             >
                                 <option value="">-- Choisir une app --</option>
                                 {Object.entries(OAUTH_PROVIDERS).map(([key, val]) => (
-                                    <option key={key} value={key}>{val.label}</option>
+                                    <option key={key} value={key} selected={selectedProvider === 'google' && key === 'google_workspace'}>
+                                        {val.label}
+                                    </option>
                                 ))}
                             </select>
                         </div>
@@ -467,17 +482,46 @@ const TriggerNode = ({ data, isConnectable }) => {
                         )}
 
                         {/* Status indicator */}
-                        <div className="flex items-center gap-2 pt-1">
-                            {isAppFullyConfigured ? (
-                                <>
-                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                                    <span className="text-[10px] font-bold text-emerald-600">✅ Trigger configuré</span>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.4)]" />
-                                    <span className="text-[10px] font-bold text-amber-600">⚠️ Configuration incomplète</span>
-                                </>
+                        <div className="flex flex-col gap-2 pt-1">
+                            <div className="flex items-center gap-2">
+                                {isAppFullyConfigured ? (
+                                    <>
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                        <span className="text-[10px] font-bold text-emerald-600">✅ Trigger configuré</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.4)]" />
+                                        <span className="text-[10px] font-bold text-amber-600">⚠️ Configuration incomplète</span>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Webhook indicator for Google Workspace (managed by Verytis) */}
+                            {selectedProvider === 'google_workspace' && (
+                                <div className="p-2.5 bg-violet-50/50 border border-violet-100 rounded-xl space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <Webhook className="w-3.5 h-3.5 text-violet-500" />
+                                        <span className="text-[9px] font-black text-violet-700 uppercase tracking-tighter">Webhook Workspace Actif</span>
+                                    </div>
+                                    <div className="relative group/copy">
+                                        <input
+                                            type="text"
+                                            readOnly
+                                            value={webhookUrl}
+                                            className="w-full bg-white/50 border border-violet-100 rounded-lg py-1 pl-2 pr-8 text-[8px] font-mono text-violet-400 outline-none"
+                                        />
+                                        <button
+                                            onClick={handleCopy}
+                                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-violet-300 hover:text-violet-600"
+                                        >
+                                            {copied ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
+                                        </button>
+                                    </div>
+                                    <p className="text-[8px] text-violet-400 italic leading-tight">
+                                        Verytis s'occupe de l'enregistrement du webhook auprès de Google.
+                                    </p>
+                                </div>
                             )}
                         </div>
 

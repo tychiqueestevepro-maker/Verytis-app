@@ -106,6 +106,19 @@ function BuilderInternal({ agent, onSave }) {
         };
         fetchSettings();
     }, [agent, fitView, hydrateNodes, setEdges, setNodes]);
+    
+    // 4b. Sync connectedProviders to all nodes when they change
+    useEffect(() => {
+        if (connectedProviders.length > 0) {
+            setNodes(nds => nds.map(n => ({
+                ...n,
+                data: {
+                    ...n.data,
+                    connectedProviders
+                }
+            })));
+        }
+    }, [connectedProviders, setNodes]);
 
     const handleSave = async () => {
         setIsSaving(true);
