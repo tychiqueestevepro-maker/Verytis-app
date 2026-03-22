@@ -5,11 +5,19 @@ const nextConfig = {
     async headers() {
         return [
             {
+                source: '/:path*.{png,jpg,jpeg,gif,webp,svg,ico}',
+                headers: [
+                    { key: 'Access-Control-Allow-Origin', value: '*' },
+                    { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS' },
+                    { key: 'Access-Control-Allow-Headers', value: '*' }
+                ]
+            },
+            {
                 source: '/icon-trello.png',
                 headers: [
                     { key: 'Access-Control-Allow-Origin', value: '*' },
                     { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS' },
-                    { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' }
+                    { key: 'Access-Control-Allow-Headers', value: '*' }
                 ]
             },
             {
@@ -17,7 +25,7 @@ const nextConfig = {
                 headers: [
                     { key: 'Access-Control-Allow-Origin', value: '*' },
                     { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS' },
-                    { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' }
+                    { key: 'Access-Control-Allow-Headers', value: '*' }
                 ]
             },
             {
