@@ -326,7 +326,7 @@ const TriggerNode = ({ data, isConnectable }) => {
                             >
                                 <option value="">-- Choisir une app --</option>
                                 {Object.entries(OAUTH_PROVIDERS).map(([key, val]) => (
-                                    <option key={key} value={key} selected={selectedProvider === 'google' && key === 'google_workspace'}>
+                                    <option key={key} value={key}>
                                         {val.label}
                                     </option>
                                 ))}
