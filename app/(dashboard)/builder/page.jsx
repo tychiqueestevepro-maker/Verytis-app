@@ -761,7 +761,7 @@ export default function AgentBuilder() {
                         className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'playground' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                     >
                         <Sparkles className="w-3.5 h-3.5" />
-                        Playground
+                        Chat
                     </button>
                 </div>
 

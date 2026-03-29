@@ -367,7 +367,7 @@ function BuilderInternal({ agent, onSave }) {
                     {showMagicBar && (
                         <Panel position="top-center" className="w-[600px] mt-4 max-w-[90vw]">
                             <form onSubmit={handleMagicBuild} className="relative group animate-in slide-in-from-top-4">
-                                <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-3xl blur opacity-20"></div>
+                                <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-sky-500 rounded-3xl blur opacity-20"></div>
                                 <div className="relative flex flex-col bg-white/95 backdrop-blur border border-blue-100 rounded-3xl shadow-2xl p-1.5 px-3">
                                     <textarea
                                         placeholder="Modifier cet agent par IA..."
@@ -449,7 +449,7 @@ export default function AgentVisualBuilderSection({ agent, onSave }) {
         <div className="animate-in fade-in duration-300">
             <div className="mb-6">
                 <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-indigo-600" />
+                    <Sparkles className="w-5 h-5 text-blue-600" />
                     Agent Architecture Design
                 </h3>
                 <p className="text-xs font-medium text-slate-500 mt-1">

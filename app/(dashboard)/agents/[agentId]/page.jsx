@@ -22,7 +22,10 @@ import {
     Database,
     Copy,
     Send,
-    Sparkles
+    Sparkles,
+    Check,
+    X,
+    UserCircle
 } from 'lucide-react';
 import { Card, Button, Modal } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
@@ -53,14 +56,8 @@ function AgentGovernanceContent({ params }) {
 
     useEffect(() => {
         const tab = searchParams.get('tab');
-        if (tab) setActiveTab(tab);
+        if (tab) setActiveTab(tab === 'playground' ? 'chat' : tab);
     }, [searchParams]);
-    const [chatInput, setChatInput] = useState('');
-    const [messages, setMessages] = useState([]);
-    const [isChatting, setIsChatting] = useState(false);
-    const [regeneratedKey, setRegeneratedKey] = useState(null);
-    const [isRegenerating, setIsRegenerating] = useState(false);
-
     // Fetch Agent Data
     const { data, error, isLoading, mutate } = useSWR(`/api/agents/${agentId}`, fetcher);
     // Fetch Global Settings (for API Key)
@@ -69,8 +66,54 @@ function AgentGovernanceContent({ params }) {
     const agent = data?.agent;
     const logs = data?.logs || [];
     const globalApiKey = settingsData?.verytis_api_key || 'vrt_live_xxxxxxxxxxxxxxxx';
-
     const agentName = agent ? agent.name : "Loading...";
+
+    const [chatInput, setChatInput] = useState('');
+    const [messages, setMessages] = useState([]);
+    const [isChatting, setIsChatting] = useState(false);
+    const [regeneratedKey, setRegeneratedKey] = useState(null);
+    const [isRegenerating, setIsRegenerating] = useState(false);
+
+    // Persist chat history from database on load
+    useEffect(() => {
+        if (data?.chatHistory) {
+            setMessages(data.chatHistory);
+        }
+    }, [data?.chatHistory]);
+
+    // Human-in-the-Loop: Execute Action (Signal back to Agent)
+    const executeAction = async (payload, confirmed) => {
+        const signal = confirmed 
+            ? `[SIGNAL: CONFIRMED] J'approuve la modification : ${payload.target_field} = ${payload.new_value}. Tu peux synchroniser la mémoire.`
+            : `[SIGNAL: CANCELLED] Je refuse cette modification. Reste sur les paramètres actuels.`;
+        
+        const userMsg = { role: 'user', content: signal };
+        const currentHistory = [...messages, userMsg];
+        setMessages(currentHistory);
+        setIsChatting(true);
+
+        try {
+            const res = await fetch(`/api/run/${agentId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${globalApiKey}`
+                },
+                body: JSON.stringify({ messages: currentHistory, message: signal })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setMessages([...currentHistory, { role: 'assistant', content: data.response, action_payload: data.action_payload }]);
+                if (confirmed) showToast({ title: 'Succès', message: 'Paramètres mis à jour avec succès', type: 'success' });
+            } else {
+                setMessages([...currentHistory, { role: 'system', content: `Erreur: ${data.error}` }]);
+            }
+        } catch (err) {
+            setMessages(prev => [...prev, { role: 'system', content: 'Échec de la validation.' }]);
+        } finally {
+            setIsChatting(false);
+        }
+    };
 
     // Calculate dynamic stats based on logs (FinOps & Usage)
     const stats = {
@@ -131,7 +174,7 @@ function AgentGovernanceContent({ params }) {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3">
-                            <ShieldCheck className="w-8 h-8 text-indigo-600" />
+                            <ShieldCheck className="w-8 h-8 text-blue-600" />
                             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
                                 {agentName}
                             </h1>
@@ -187,7 +230,7 @@ function AgentGovernanceContent({ params }) {
             <div className="flex items-center gap-1 border-b border-slate-200">
                 <button
                     onClick={() => setActiveTab('telemetry')}
-                    className={`px-4 py-2 text-xs font-bold transition-all border-b-2 ${activeTab === 'telemetry' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    className={`px-4 py-2 text-xs font-bold transition-all border-b-2 ${activeTab === 'telemetry' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                 >
                     <div className="flex items-center gap-2">
                         <BarChart2 className="w-3.5 h-3.5" />
@@ -195,17 +238,17 @@ function AgentGovernanceContent({ params }) {
                     </div>
                 </button>
                 <button
-                    onClick={() => setActiveTab('playground')}
-                    className={`px-4 py-2 text-xs font-bold transition-all border-b-2 ${activeTab === 'playground' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    onClick={() => setActiveTab('chat')}
+                    className={`px-4 py-2 text-xs font-bold transition-all border-b-2 ${activeTab === 'chat' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                 >
                     <div className="flex items-center gap-2">
                         <Sparkles className="w-3.5 h-3.5" />
-                        Playground (Test)
+                        Chat
                     </div>
                 </button>
                 <button
                     onClick={() => setActiveTab('builder')}
-                    className={`px-4 py-2 text-xs font-bold transition-all border-b-2 ${activeTab === 'builder' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    className={`px-4 py-2 text-xs font-bold transition-all border-b-2 ${activeTab === 'builder' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                 >
                     <div className="flex items-center gap-2">
                         <Layers className="w-3.5 h-3.5" />
@@ -214,7 +257,7 @@ function AgentGovernanceContent({ params }) {
                 </button>
                 <button
                     onClick={() => setActiveTab('deployment')}
-                    className={`px-4 py-2 text-xs font-bold transition-all border-b-2 ${activeTab === 'deployment' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    className={`px-4 py-2 text-xs font-bold transition-all border-b-2 ${activeTab === 'deployment' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
                 >
                     <div className="flex items-center gap-2">
                         <ExternalLink className="w-3.5 h-3.5" />
@@ -234,46 +277,46 @@ function AgentGovernanceContent({ params }) {
                             </h2>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <Card className="p-5 flex flex-col justify-between">
-                                <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 mb-3">
+                            <Card className="p-5 flex flex-col justify-between border-t-4 border-t-emerald-500 shadow-md transition-transform hover:scale-[1.02]">
+                                <div className="flex items-center gap-2 text-sm font-black text-emerald-700 mb-3 uppercase tracking-tighter">
                                     <DollarSign className="w-4 h-4 text-emerald-500" />
                                     Total Spend
                                 </div>
                                 <div>
-                                    <div className="text-2xl font-bold text-slate-900">{stats.totalSpend}</div>
+                                    <div className="text-2xl font-black text-slate-900">{stats.totalSpend}</div>
                                     <p className="text-[10px] text-slate-500 font-bold mt-1 uppercase tracking-wide">Coût cumulé de l'agent</p>
                                 </div>
                             </Card>
 
-                            <Card className="p-5 flex flex-col justify-between">
-                                <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 mb-3">
-                                    <Cpu className="w-4 h-4 text-indigo-500" />
+                            <Card className="p-5 flex flex-col justify-between border-t-4 border-t-blue-500 shadow-md transition-transform hover:scale-[1.02]">
+                                <div className="flex items-center gap-2 text-sm font-black text-blue-700 mb-3 uppercase tracking-tighter">
+                                    <Cpu className="w-4 h-4 text-blue-500" />
                                     Total Tokens
                                 </div>
                                 <div>
-                                    <div className="text-2xl font-bold text-slate-900">{stats.totalTokens}</div>
+                                    <div className="text-2xl font-black text-slate-900">{stats.totalTokens}</div>
                                     <p className="text-[10px] text-slate-500 font-bold mt-1 uppercase tracking-wide">Jetons traités (in/out)</p>
                                 </div>
                             </Card>
 
-                            <Card className="p-5 flex flex-col justify-between">
-                                <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 mb-3">
-                                    <Layers className="w-4 h-4 text-blue-500" />
+                            <Card className="p-5 flex flex-col justify-between border-t-4 border-t-sky-500 shadow-md transition-transform hover:scale-[1.02]">
+                                <div className="flex items-center gap-2 text-sm font-black text-sky-700 mb-3 uppercase tracking-tighter">
+                                    <Layers className="w-4 h-4 text-sky-500" />
                                     Requests / Prompts
                                 </div>
                                 <div>
-                                    <div className="text-2xl font-bold text-slate-900">{stats.requests}</div>
+                                    <div className="text-2xl font-black text-slate-900">{stats.requests}</div>
                                     <p className="text-[10px] text-slate-500 font-bold mt-1 uppercase tracking-wide">Invocations AI réussies</p>
                                 </div>
                             </Card>
 
-                            <Card className="p-5 flex flex-col justify-between">
-                                <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 mb-3">
+                            <Card className="p-5 flex flex-col justify-between border-t-4 border-t-rose-500 shadow-md transition-transform hover:scale-[1.02]">
+                                <div className="flex items-center gap-2 text-sm font-black text-rose-700 mb-3 uppercase tracking-tighter">
                                     <ShieldAlert className="w-4 h-4 text-rose-500" />
                                     Actions & Requêtes Bloquées
                                 </div>
                                 <div>
-                                    <div className="text-2xl font-bold text-slate-900">{stats.policyBlocks}</div>
+                                    <div className="text-2xl font-black text-slate-900">{stats.policyBlocks}</div>
                                     <p className="text-[10px] text-slate-500 font-bold mt-1 uppercase tracking-wide leading-tight">Tentatives bloquées par Verytis</p>
                                 </div>
                             </Card>
@@ -308,13 +351,13 @@ function AgentGovernanceContent({ params }) {
 
                     {/* Activity Ledger */}
                     <div className="pt-4 pb-12">
-                        <Card>
-                            <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/30">
-                                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                                    <LinkIcon className="w-5 h-5 text-indigo-600" />
+                        <Card className="border-l-4 border-l-blue-600 shadow-xl overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-100 bg-blue-50/20">
+                                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2 uppercase tracking-tighter">
+                                    <LinkIcon className="w-5 h-5 text-blue-600" />
                                     Activity Ledger
                                 </h3>
-                                <p className="text-xs font-medium text-slate-500 mt-1">
+                                <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-widest leading-tight">
                                     Transparent audit trail of all agent operations.
                                 </p>
                             </div>
@@ -339,11 +382,11 @@ function AgentGovernanceContent({ params }) {
                                         ) : logs.map((log) => (
                                             <React.Fragment key={log.id}>
                                                 <tr
-                                                    className="hover:bg-slate-50 transition-colors cursor-pointer group"
+                                                    className="hover:bg-blue-50/30 transition-colors cursor-pointer group"
                                                     onClick={() => router.push(`/agents/${agentId}/trace/${log.metadata?.trace_id}`)}
                                                 >
                                                     <td className="px-6 py-4">
-                                                        <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                                                             <ExternalLink className="w-4 h-4" />
                                                         </div>
                                                     </td>
@@ -382,57 +425,118 @@ function AgentGovernanceContent({ params }) {
                 </div>
             )}
 
-            {activeTab === 'playground' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
-                    <Card className="lg:col-span-2 flex flex-col h-[600px] overflow-hidden">
-                        <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                            <div>
-                                <h3 className="text-sm font-bold text-slate-900">Conversation Temps Réel</h3>
-                                <p className="text-[10px] text-slate-500">Testez votre agent instantanément</p>
+            {activeTab === 'chat' && (
+                <div className="flex gap-6 h-[700px] animate-in fade-in duration-500">
+                    {/* Main Chat Hub */}
+                    <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden relative">
+                        {/* Status Bar */}
+                        <div className="px-6 py-3 border-b border-slate-100 flex justify-between items-center bg-white/80 backdrop-blur-md z-10 sticky top-0">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-tight">Session Active - {agentName}</h3>
                             </div>
-                            <Button variant="ghost" onClick={() => setMessages([])} className="h-8 text-[10px]">
-                                Effacer
+                            <Button variant="ghost" onClick={() => setMessages([])} className="h-7 text-[10px] text-slate-400 hover:text-slate-600">
+                                Réinitialiser
                             </Button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/30">
+                        {/* Scrollable Conversation */}
+                        <div className="flex-1 overflow-y-auto p-8 space-y-8 scroll-smooth">
                             {messages.length === 0 && (
-                                <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
-                                    <Bot className="w-12 h-12 text-slate-300 mb-2" />
-                                    <p className="text-sm font-medium text-slate-500">Dites "Bonjour" pour commencer...</p>
+                                <div className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto">
+                                    <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mb-4 rotate-3 animate-bounce">
+                                        <Sparkles className="w-8 h-8 text-blue-500" />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-slate-900 mb-2">Prêt pour le déploiement ?</h3>
+                                    <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                                        Testez les capacités de votre agent, demandez-lui d'ajuster son ton ou d'activer de nouvelles intégrations.
+                                    </p>
                                 </div>
                             )}
+
                             {messages.map((m, i) => (
-                                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm ${m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'}`}>
-                                        <div className="text-[10px] font-bold uppercase opacity-50 mb-1">
-                                            {m.role === 'user' ? 'Vous' : agentName}
+                                <div key={i} className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    {m.role !== 'user' && (
+                                        <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center flex-shrink-0 shadow-lg mt-1">
+                                            <Bot className="w-4 h-4 text-white" />
                                         </div>
-                                        {m.content}
+                                    )}
+
+                                    <div className={`max-w-[85%] group relative ${m.role === 'user' ? 'text-right' : 'text-left'}`}>
+                                        <div className={`text-[10px] font-black uppercase tracking-widest mb-1.5 opacity-30 ${m.role === 'user' ? 'mr-1' : 'ml-1'}`}>
+                                            {m.role === 'user' ? 'Propriétaire' : agentName}
+                                        </div>
+                                        
+                                        <div className={`
+                                            inline-block px-5 py-3.5 rounded-2xl text-[13px] leading-relaxed transition-all
+                                            ${m.role === 'user' 
+                                                ? 'bg-blue-600 text-white rounded-tr-none shadow-blue-500/10 shadow-lg font-medium' 
+                                                : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none font-medium'
+                                            }
+                                        `}>
+                                            <div className="whitespace-pre-wrap">{m.content}</div>
+
+                                            {m.action_payload && (
+                                                <div className="mt-4 p-4 bg-white/80 border border-slate-200 rounded-xl shadow-inner-white overflow-hidden animate-in zoom-in-95 duration-200">
+                                                    <div className="flex items-center gap-2 text-[10px] font-black text-blue-600 uppercase mb-3">
+                                                        <Cpu className="w-3.5 h-3.5" />
+                                                        Action du Gouverneur Requis
+                                                    </div>
+                                                    <div className="bg-slate-100/50 p-2.5 rounded-lg mb-4 border border-slate-200">
+                                                        <div className="text-[11px] text-slate-500 font-bold uppercase mb-1">Impact Détecté :</div>
+                                                        <div className="text-xs text-slate-800 font-bold">{m.action_payload.change_detected}</div>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            onClick={() => executeAction(m.action_payload, true)}
+                                                            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[11px] font-black transition-all active:scale-95 shadow-lg shadow-blue-500/20"
+                                                        >
+                                                            <Check className="w-4 h-4" /> VALIDER
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => executeAction(m.action_payload, false)}
+                                                            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-[11px] font-black transition-all active:scale-95"
+                                                        >
+                                                            <X className="w-4 h-4" /> ANNULER
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
+
+                                    {m.role === 'user' && (
+                                        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg mt-1">
+                                            <UserCircle className="w-5 h-5 text-white" />
+                                        </div>
+                                    )}
                                 </div>
                             ))}
+
                             {isChatting && (
-                                <div className="flex justify-start">
-                                    <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm">
-                                        <div className="flex gap-1.5 items-center">
-                                            <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce"></div>
-                                            <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                                            <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:0.4s]"></div>
-                                        </div>
+                                <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center">
+                                        <Bot className="w-4 h-4 text-slate-400" />
+                                    </div>
+                                    <div className="bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-none px-4 py-3 flex gap-1.5 items-center shadow-sm">
+                                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-duration:0.8s]"></div>
+                                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-duration:0.8s] [animation-delay:0.2s]"></div>
+                                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-duration:0.8s] [animation-delay:0.4s]"></div>
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        <div className="p-4 border-t border-slate-100 bg-white">
+                        {/* Professional Input Dock */}
+                        <div className="p-6 bg-slate-50/50 border-t border-slate-100">
                             <form
-                                className="flex gap-2"
+                                className="relative flex items-end gap-3 max-w-4xl mx-auto"
                                 onSubmit={async (e) => {
                                     e.preventDefault();
                                     if (!chatInput.trim() || isChatting) return;
                                     const userMsg = { role: 'user', content: chatInput };
-                                    setMessages(prev => [...prev, userMsg]);
+                                    const currentHistory = [...messages, userMsg];
+                                    setMessages(currentHistory);
                                     setChatInput('');
                                     setIsChatting(true);
                                     try {
@@ -442,52 +546,81 @@ function AgentGovernanceContent({ params }) {
                                                 'Content-Type': 'application/json',
                                                 'Authorization': `Bearer ${globalApiKey}`
                                             },
-                                            body: JSON.stringify({ message: chatInput })
+                                            body: JSON.stringify({ messages: currentHistory, message: chatInput })
                                         });
                                         const data = await res.json();
                                         if (res.ok) {
-                                            setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+                                            setMessages([...currentHistory, { role: 'assistant', content: data.response, action_payload: data.action_payload }]);
                                         } else {
-                                            setMessages(prev => [...prev, { role: 'system', content: `Erreur: ${data.error || 'Gateway inaccessible'}` }]);
+                                            setMessages([...currentHistory, { role: 'system', content: `Erreur critique: ${data.error || 'Gateway Timeout'}` }]);
                                         }
                                     } catch (err) {
-                                        setMessages(prev => [...prev, { role: 'system', content: 'Échec de la connexion au serveur.' }]);
+                                        setMessages(prev => [...prev, { role: 'system', content: 'Échec de la connexion sécurisée.' }]);
                                     } finally {
                                         setIsChatting(false);
                                     }
                                 }}
                             >
-                                <input
-                                    type="text"
-                                    placeholder="Posez une question à votre agent..."
-                                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                                    value={chatInput}
-                                    onChange={(e) => setChatInput(e.target.value)}
-                                />
-                                <Button type="submit" disabled={isChatting || !chatInput.trim()} icon={Send}>
-                                    Envoyer
-                                </Button>
+                                <div className="flex-1 relative group">
+                                    <input
+                                        type="text"
+                                        placeholder="Piloter l'intelligence de votre agent..."
+                                        className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-4 text-sm outline-none focus:ring-4 focus:ring-blue-600/5 focus:border-blue-600 transition-all shadow-sm group-hover:border-slate-300"
+                                        value={chatInput}
+                                        onChange={(e) => setChatInput(e.target.value)}
+                                    />
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                                        <Sparkles className="w-5 h-5 text-blue-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                </div>
+                                <button 
+                                    type="submit" 
+                                    disabled={isChatting || !chatInput.trim()} 
+                                    className="bg-slate-900 hover:bg-blue-600 disabled:bg-slate-200 text-white p-4 rounded-2xl transition-all shadow-lg active:scale-95"
+                                >
+                                    <Send className="w-5 h-5" />
+                                </button>
                             </form>
+                            <p className="text-[9px] text-center text-slate-400 mt-2 font-medium tracking-wide">
+                                Les actions structurelles demandent votre approbation.
+                            </p>
                         </div>
-                    </Card>
+                    </div>
 
-                    <div className="space-y-4">
-                        <Card className="p-5">
-                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4">Prompt Système Actif</h4>
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 italic text-xs text-slate-500 leading-relaxed max-h-[200px] overflow-y-auto">
-                                "{agent.system_prompt || 'Aucun prompt configuré.'}"
+                    {/* Intelligence Sidebar */}
+                    <div className="w-80 flex flex-col gap-4">
+                        <Card className="p-6 bg-slate-900 border-none relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-8 text-blue-500 opacity-5 group-hover:scale-110 transition-transform duration-700">
+                                <Cpu className="w-32 h-32" />
+                            </div>
+                            <div className="relative">
+                                <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-4">Prompt Système Actif</h4>
+                                <div className="text-[11px] text-slate-300 font-medium leading-relaxed italic line-clamp-[12] hover:line-clamp-none transition-all duration-300 cursor-help">
+                                    "{agent.system_prompt || 'Standard Autonomous Protocol Active'}"
+                                </div>
                             </div>
                         </Card>
-                        <Card className="p-5">
-                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4">Guardrails Actifs</h4>
-                            <div className="space-y-2">
-                                <div className="flex justify-between items-center text-[10px] font-bold">
-                                    <span className="text-slate-500">Budget Max/Jour</span>
-                                    <span className="text-indigo-600">${agent.policies?.budget_daily_max || '0.00'}</span>
+
+                        <Card className="p-6">
+                            <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                                Gouvernance & Limites
+                            </h4>
+                            <div className="space-y-4">
+                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">Budget Max Quotidien</div>
+                                    <div className="text-sm font-black text-blue-600">${agent.policies?.budget_daily_max || '0.00'}</div>
                                 </div>
-                                <div className="flex justify-between items-center text-[10px] font-bold">
-                                    <span className="text-slate-500">Mots Interdits</span>
-                                    <span className="text-rose-600">{agent.policies?.forbidden_keywords?.length || 0}</span>
+                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">Mots-clés Restreints</div>
+                                    <div className="text-sm font-black text-rose-600">{agent.policies?.forbidden_keywords?.length || 0}</div>
+                                </div>
+                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">Mode de Déploiement</div>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight">Enterprise Live</span>
+                                    </div>
                                 </div>
                             </div>
                         </Card>
@@ -604,7 +737,7 @@ function AgentGovernanceContent({ params }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Card className="p-6">
                             <h4 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
-                                <span className="w-1 h-1 bg-indigo-600 rounded-full"></span>
+                                <span className="w-1 h-1 bg-blue-600 rounded-full"></span>
                                 Exemple de Requête (Node.js)
                             </h4>
                             <div className="bg-slate-900 rounded-xl p-4 font-mono text-[10px] text-blue-300 overflow-x-auto">
@@ -613,7 +746,7 @@ function AgentGovernanceContent({ params }) {
                         </Card>
                         <Card className="p-6">
                             <h4 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
-                                <span className="w-1 h-1 bg-indigo-600 rounded-full"></span>
+                                <span className="w-1 h-1 bg-blue-600 rounded-full"></span>
                                 Exemple de Requête (Python)
                             </h4>
                             <div className="bg-slate-900 rounded-xl p-4 font-mono text-[10px] text-blue-300 overflow-x-auto">

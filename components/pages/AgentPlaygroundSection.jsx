@@ -29,7 +29,8 @@ export default function AgentPlaygroundSection({ agentId, agentName }) {
         }
 
         const userMsg = { role: 'user', content: chatInput };
-        setMessages(prev => [...prev, userMsg]);
+        const currentHistory = [...messages, userMsg];
+        setMessages(currentHistory);
         setChatInput('');
         setIsChatting(true);
 
@@ -40,14 +41,14 @@ export default function AgentPlaygroundSection({ agentId, agentName }) {
                     'Content-Type': 'application/json',
                     // No Authorization header needed: backend will use session cookie
                 },
-                body: JSON.stringify({ message: chatInput })
+                body: JSON.stringify({ messages: currentHistory, message: chatInput })
             });
             const data = await res.json();
             if (res.ok) {
-                setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+                setMessages([...currentHistory, { role: 'assistant', content: data.response }]);
             } else {
                 const errorMsg = data.message ? `${data.error}: ${data.message}` : (data.error || 'Gateway inaccessible');
-                setMessages(prev => [...prev, { role: 'system', content: `Erreur: ${errorMsg}` }]);
+                setMessages([...currentHistory, { role: 'system', content: `Erreur: ${errorMsg}` }]);
             }
         } catch (err) {
             setMessages(prev => [...prev, { role: 'system', content: 'Échec de la connexion au serveur.' }]);
@@ -65,7 +66,7 @@ export default function AgentPlaygroundSection({ agentId, agentName }) {
                     </div>
                     <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Activez d'abord votre Agent</h2>
                     <p className="text-slate-500 max-w-md text-sm leading-relaxed">
-                        Le Playground permet de simuler une interaction réelle. Sauvegardez votre configuration pour que l'IA puisse s'initialiser et répondre à vos questions.
+                        Le Chat permet de simuler une interaction bidirectionnelle. Sauvegardez votre configuration pour que l'IA puisse commencer à discuter.
                     </p>
                 </div>
             ) : (
@@ -81,7 +82,7 @@ export default function AgentPlaygroundSection({ agentId, agentName }) {
                                     <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">{agentName || 'Agent'}</h3>
                                     <div className="flex items-center gap-1.5">
                                         <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Interactive Playground</span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Interactive Chat</span>
                                     </div>
                                 </div>
                             </div>

@@ -8,12 +8,21 @@ const PlaceholderNode = ({ data, isConnectable }) => {
     const [isSaving, setIsSaving] = useState(false);
     const [tempKey, setTempKey] = useState('');
     const [isSynced, setIsSynced] = useState(false);
-    const [selectedProvider, setSelectedProvider] = useState(data.provider === 'custom' || data.provider === 'llama3' ? 'ollama' : (data.provider || null));
+    const [selectedProvider, setSelectedProvider] = useState(data.provider === 'custom' || data.provider === 'llama3' ? 'ollama' : (data.provider || 'verytis'));
 
     // Handle provider prop updates safely
     useEffect(() => {
         if (data.provider === 'custom' || data.provider === 'llama3') setSelectedProvider('ollama');
         else if (data.provider) setSelectedProvider(data.provider);
+        else {
+            setSelectedProvider('verytis');
+            if (data.onChange) {
+                data.onChange('provider', 'verytis');
+                if (providerConfig.verytis) {
+                    data.onChange('model', providerConfig.verytis.defaultModel);
+                }
+            }
+        }
     }, [data.provider]);
 
     const providerConfig = {
@@ -220,7 +229,7 @@ const PlaceholderNode = ({ data, isConnectable }) => {
                             Sélectionnez un cerveau pour débloquer les options.
                         </p>
                     </div>
-                ) : selectedProvider === 'ollama' ? null : data.system_prompt ? (
+                ) : selectedProvider === 'ollama' ? null : (
                     <div className="flex flex-col items-center gap-2 w-full px-2">
                         {!isConnected ? (
                             <div className="relative w-full group/input mt-1">
@@ -243,18 +252,18 @@ const PlaceholderNode = ({ data, isConnectable }) => {
                                 )}
                             </div>
                         ) : (
-                            <div className={`flex items-center gap-2 bg-${config.baseColor}-50 px-3 py-1 rounded-full border border-${config.baseColor}-100 transition-all animate-in zoom-in-95`}>
-                                <div className={`w-1.5 h-1.5 rounded-full bg-${config.baseColor}-500 shadow-[0_0_8px_rgba(${config.shadowRgb},0.5)]`}></div>
-                                <span className={`text-[9px] font-black uppercase text-${config.baseColor}-700 tracking-tight`}>Prêt à l'action</span>
+                            <div className="flex flex-col items-center gap-1.5">
+                                <div className={`flex items-center gap-2 bg-${config.baseColor}-50 px-3 py-1 rounded-full border border-${config.baseColor}-100 transition-all animate-in zoom-in-95`}>
+                                    <div className={`w-1.5 h-1.5 rounded-full bg-${config.baseColor}-500 shadow-[0_0_8px_rgba(${config.shadowRgb},0.5)]`}></div>
+                                    <span className={`text-[9px] font-black uppercase text-${config.baseColor}-700 tracking-tight`}>Prêt à l'action</span>
+                                </div>
+                                {!data.system_prompt && (
+                                    <p className={`text-[8px] text-${config.baseColor}-400 font-bold uppercase tracking-tighter leading-tight italic opacity-60`}>
+                                        Personnalité à configurer
+                                    </p>
+                                )}
                             </div>
                         )}
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center gap-1.5 px-4 opacity-50">
-                        <div className={`w-full h-px bg-gradient-to-r from-transparent via-${config.baseColor}-200 to-transparent`}></div>
-                        <p className={`text-[9px] text-${config.baseColor}-700 font-bold uppercase tracking-tighter leading-tight italic`}>
-                            Configurez la personnalité dans le sidebar.
-                        </p>
                     </div>
                 )}
             </div>

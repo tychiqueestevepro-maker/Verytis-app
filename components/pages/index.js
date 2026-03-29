@@ -1,3 +1,5 @@
+import dynamic from 'next/dynamic';
+
 export { default as Dashboard } from './Dashboard';
 export { default as Teams } from './TeamsList';
 export { default as TeamDetail } from './TeamDetail';
@@ -6,7 +8,8 @@ export { default as ChannelDetail } from './ChannelDetail';
 export { default as TimelineIntegrationList } from './TimelineIntegrationList';
 export { default as TimelineResourceList } from './TimelineResourceList';
 export { default as TimelineFeed } from './TimelineFeed';
-export { default as AuditDocumentation } from './AuditDocumentation';
+
+export const AuditDocumentation = dynamic(() => import('./AuditDocumentation'), { ssr: false });
 export { default as UsersAndRoles } from './UsersAndRoles';
 export { default as UserDetail } from './UserDetail';
 export { default as IntegrationsSettings } from './IntegrationsSettings';

@@ -110,7 +110,18 @@ export async function GET(req, { params }) {
 
         if (logsError) throw logsError;
 
-        return NextResponse.json({ agent, logs: telemetryLogs });
+        // Fetch dynamic chat history (human conversations)
+        const { data: chatHistory, error: chatError } = await supabase
+            .from('ai_agent_chats')
+            .select('*')
+            .eq('agent_id', agentId)
+            .eq('organization_id', profile.organization_id)
+            .order('created_at', { ascending: true })
+            .limit(50);
+
+        if (chatError) throw chatError;
+
+        return NextResponse.json({ agent, logs: telemetryLogs, chatHistory });
 
     } catch (error) {
         console.error('Error fetching agent details:', error);
