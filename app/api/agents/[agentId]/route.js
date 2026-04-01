@@ -121,7 +121,12 @@ export async function GET(req, { params }) {
 
         if (chatError) throw chatError;
 
-        return NextResponse.json({ agent, logs: telemetryLogs, chatHistory });
+        return NextResponse.json({ 
+            agent, 
+            logs: telemetryLogs, 
+            chatHistory,
+            serverTimestamp: Date.now() 
+        });
 
     } catch (error) {
         console.error('Error fetching agent details:', error);

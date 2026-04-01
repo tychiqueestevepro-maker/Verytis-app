@@ -1,0 +1,23 @@
+t=2026-03-31T11:10:57+0200 lvl=info msg="no configuration paths supplied"
+t=2026-03-31T11:10:57+0200 lvl=info msg="using configuration at default config path" path="/Users/tychiqueesteve/Library/Application Support/ngrok/ngrok.yml"
+t=2026-03-31T11:10:57+0200 lvl=info msg="open config file" path="/Users/tychiqueesteve/Library/Application Support/ngrok/ngrok.yml" err=nil
+t=2026-03-31T11:10:57+0200 lvl=info msg="FIPS 140 mode" enabled=false
+t=2026-03-31T11:10:57+0200 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2026-03-31T11:10:57+0200 lvl=info msg="client session established" obj=tunnels.session
+t=2026-03-31T11:10:57+0200 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-03-31T11:10:57+0200 lvl=eror msg="session closing" obj=tunnels.session err="failed to start tunnel: Only paid plans may create endpoints with custom subdomains.\nFailed to create an endpoint with the custom subdomain 'ngrok-free.app' for the account 'tychiqueesteve2005@gmail.com'.\nThis account is on the 'Free' plan.\n\nUpgrade to a paid plan at: https://dashboard.ngrok.com/billing/choose-a-plan\r\n\r\nERR_NGROK_313\r\n"
+t=2026-03-31T11:10:57+0200 lvl=info msg="accept failed" obj=tunnels.session obj=csess id=2772f50ba894 err="reconnecting session closed"
+t=2026-03-31T11:10:57+0200 lvl=info msg="no more state changes" obj=tunnels.session
+t=2026-03-31T11:10:57+0200 lvl=info msg="received stop request" obj=app stopReq="{err:{Inner:{Inner:0x140002ca030}} restart:false}"
+t=2026-03-31T11:10:57+0200 lvl=eror msg="terminating with error" obj=app err="failed to start tunnel: Only paid plans may create endpoints with custom subdomains.\nFailed to create an endpoint with the custom subdomain 'ngrok-free.app' for the account 'tychiqueesteve2005@gmail.com'.\nThis account is on the 'Free' plan.\n\nUpgrade to a paid plan at: https://dashboard.ngrok.com/billing/choose-a-plan\r\n\r\nERR_NGROK_313\r\n"
+t=2026-03-31T11:10:57+0200 lvl=warn msg="failed to check for update" obj=updater err="Post \"https://update.equinox.io/check\": context canceled"
+t=2026-03-31T11:10:57+0200 lvl=crit msg="command failed" err="failed to start tunnel: Only paid plans may create endpoints with custom subdomains.\nFailed to create an endpoint with the custom subdomain 'ngrok-free.app' for the account 'tychiqueesteve2005@gmail.com'.\nThis account is on the 'Free' plan.\n\nUpgrade to a paid plan at: https://dashboard.ngrok.com/billing/choose-a-plan\r\n\r\nERR_NGROK_313\r\n"
+ERROR:  failed to start tunnel: Only paid plans may create endpoints with custom subdomains.
+ERROR:  Failed to create an endpoint with the custom subdomain 'ngrok-free.app' for the account 'tychiqueesteve2005@gmail.com'.
+ERROR:  This account is on the 'Free' plan.
+ERROR:  
+ERROR:  Upgrade to a paid plan at: https://dashboard.ngrok.com/billing/choose-a-plan
+ERROR:  
+ERROR:  ERR_NGROK_313
+ERROR:  https://ngrok.com/docs/errors/err_ngrok_313
+ERROR:  
